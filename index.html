@@ -1,0 +1,385 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>NRCC Power Plant — Analytics Console</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700;800;900&family=Spline+Sans+Mono:wght@400;500;600&family=Sora:wght@600;700;800&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<style>
+:root{
+  --bg:#0a0e14;--panel:#10151f;--panel-2:#0d121b;--line:#1d2734;
+  --ink:#e8eef6;--ink-dim:#8a99ad;--ink-faint:#5b6878;
+  --accent:#36d399;--amber:#fbbf24;--red:#f87171;--blue:#60a5fa;--violet:#a78bfa;--pink:#f472b6;
+  --grid:#161d29;--shadow:0 1px 0 rgba(255,255,255,.03),0 8px 30px rgba(0,0,0,.5);
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{background:var(--bg);color:var(--ink);font-family:'Archivo',sans-serif;-webkit-font-smoothing:antialiased}
+body{background-image:radial-gradient(1200px 600px at 80% -10%,rgba(54,211,153,.06),transparent 60%),radial-gradient(900px 500px at 0% 0%,rgba(96,165,250,.05),transparent 55%);min-height:100vh}
+.mono{font-family:'Spline Sans Mono',monospace;font-variant-numeric:tabular-nums}
+.wrap{max-width:1320px;margin:0 auto;padding:24px 22px 80px}
+header{display:flex;align-items:flex-end;justify-content:space-between;flex-wrap:wrap;gap:18px;padding-bottom:18px;border-bottom:1px solid var(--line)}
+.brand{display:flex;flex-direction:column;gap:5px}
+.kicker{font-family:'Spline Sans Mono',monospace;font-size:11px;letter-spacing:.32em;text-transform:uppercase;color:var(--accent)}
+h1{font-family:'Sora',sans-serif;font-weight:800;font-size:28px;line-height:1;letter-spacing:-.02em}
+.sub{color:var(--ink-dim);font-size:13px}
+.live{display:flex;align-items:center;gap:8px;font-family:'Spline Sans Mono',monospace;font-size:11px;color:var(--ink-dim)}
+.dot{width:8px;height:8px;border-radius:50%;background:var(--accent);animation:pulse 2s infinite}
+@keyframes pulse{0%{box-shadow:0 0 0 0 rgba(54,211,153,.5)}70%{box-shadow:0 0 0 8px rgba(54,211,153,0)}100%{box-shadow:0 0 0 0 rgba(54,211,153,0)}}
+.tabs{display:flex;gap:6px;margin:20px 0 22px;flex-wrap:wrap}
+.tab{font-family:'Spline Sans Mono',monospace;font-size:12.5px;letter-spacing:.04em;background:var(--panel);color:var(--ink-dim);border:1px solid var(--line);border-radius:10px;padding:10px 18px;cursor:pointer;transition:.15s}
+.tab:hover{color:var(--ink);border-color:var(--ink-faint)}
+.tab.active{background:linear-gradient(180deg,rgba(54,211,153,.16),rgba(54,211,153,.05));color:var(--accent);border-color:var(--accent)}
+select,button,input{font-family:'Spline Sans Mono',monospace;background:var(--panel);color:var(--ink);border:1px solid var(--line);border-radius:9px;padding:9px 12px;font-size:12.5px;cursor:pointer;transition:.15s}
+select:hover,button:hover{border-color:var(--accent);color:var(--accent)}
+input{cursor:text;width:90px}
+label.fld{display:flex;flex-direction:column;gap:5px;font-family:'Spline Sans Mono',monospace;font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-faint)}
+.bar-controls{display:flex;gap:14px;flex-wrap:wrap;align-items:flex-end;margin-bottom:20px}
+.kpis{display:grid;grid-template-columns:repeat(6,1fr);gap:13px;margin-bottom:22px}
+.kpi{background:linear-gradient(180deg,var(--panel),var(--panel-2));border:1px solid var(--line);border-radius:14px;padding:15px 15px 13px;box-shadow:var(--shadow);position:relative;overflow:hidden}
+.kpi::before{content:"";position:absolute;left:0;top:0;bottom:0;width:3px;background:var(--accent)}
+.kpi.blue::before{background:var(--blue)}.kpi.amber::before{background:var(--amber)}.kpi.red::before{background:var(--red)}.kpi.violet::before{background:var(--violet)}.kpi.pink::before{background:var(--pink)}
+.kpi .lab{font-family:'Spline Sans Mono',monospace;font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--ink-faint)}
+.kpi .val{font-family:'Sora',sans-serif;font-weight:800;font-size:24px;margin-top:7px;letter-spacing:-.02em}
+.kpi .unit{font-size:12px;color:var(--ink-dim);font-weight:600;margin-left:3px}
+.kpi .delta{font-family:'Spline Sans Mono',monospace;font-size:10.5px;margin-top:5px;color:var(--ink-dim)}
+.up{color:var(--accent)}.down{color:var(--red)}
+.grid{display:grid;grid-template-columns:1.3fr 1fr;gap:15px;margin-bottom:15px}
+.grid-2{display:grid;grid-template-columns:1fr 1fr;gap:15px;margin-bottom:15px}
+.card{background:linear-gradient(180deg,var(--panel),var(--panel-2));border:1px solid var(--line);border-radius:16px;padding:18px 20px;box-shadow:var(--shadow)}
+.card.full{grid-column:1/-1}
+.card h2{font-family:'Sora',sans-serif;font-size:13px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;display:flex;align-items:center;gap:9px;margin-bottom:15px}
+.card h2 .tag{margin-left:auto;font-family:'Spline Sans Mono',monospace;font-size:10px;font-weight:500;color:var(--ink-faint);text-transform:none}
+.chartbox{position:relative;height:240px}
+.chartbox.tall{height:300px}
+.tank{margin-bottom:13px}.tank:last-child{margin-bottom:0}
+.tank .top{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:5px}
+.tank .name{font-size:13px;font-weight:600}
+.tank .name small{color:var(--ink-faint);font-weight:400;font-family:'Spline Sans Mono',monospace;font-size:10px;margin-left:6px}
+.tank .fig{font-family:'Spline Sans Mono',monospace;font-size:12px;color:var(--ink-dim)}
+.barg{height:13px;background:var(--grid);border-radius:7px;overflow:hidden;border:1px solid var(--line)}
+.barg i{display:block;height:100%;border-radius:7px;background:linear-gradient(90deg,var(--accent),#5eead4);transition:width .7s}
+.barg.warn i{background:linear-gradient(90deg,var(--amber),#fcd34d)}
+.barg.crit i{background:linear-gradient(90deg,var(--red),#fca5a5)}
+table{width:100%;border-collapse:collapse;font-family:'Spline Sans Mono',monospace;font-size:11.5px}
+th{text-align:right;color:var(--ink-faint);font-weight:500;letter-spacing:.06em;text-transform:uppercase;font-size:9.5px;padding:7px 9px;border-bottom:1px solid var(--line)}
+th:first-child,td:first-child{text-align:left}
+td{padding:6px 9px;border-bottom:1px solid var(--grid);color:var(--ink-dim)}
+td b{color:var(--ink);font-weight:600}
+.tbl-scroll{max-height:340px;overflow:auto}
+.stat-row{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:16px}
+.stat{background:var(--panel-2);border:1px solid var(--line);border-radius:11px;padding:13px}
+.stat .l{font-family:'Spline Sans Mono',monospace;font-size:9.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-faint)}
+.stat .n{font-family:'Sora',sans-serif;font-weight:700;font-size:19px;margin-top:6px}
+.fc-grid{display:grid;grid-template-columns:1fr 1fr;gap:15px}
+.fc-input{display:flex;flex-direction:column;gap:13px}
+.fc-input .ln{display:flex;justify-content:space-between;align-items:center;gap:12px}
+.fc-input .ln span{font-size:12.5px;color:var(--ink-dim)}
+.result{background:var(--panel-2);border:1px solid var(--line);border-radius:11px;padding:14px 16px;margin-top:10px}
+.result .big{font-family:'Sora',sans-serif;font-weight:800;font-size:30px;letter-spacing:-.02em}
+.result .cap{font-family:'Spline Sans Mono',monospace;font-size:11px;color:var(--ink-dim);margin-top:4px}
+.note{font-size:11.5px;color:var(--ink-faint);line-height:1.5;margin-top:10px;font-family:'Spline Sans Mono',monospace}
+.flags{display:flex;flex-direction:column;gap:7px;max-height:300px;overflow:auto}
+.flag{display:flex;gap:10px;align-items:flex-start;font-size:12px;line-height:1.4;padding:8px 10px;border-radius:8px;background:var(--panel-2);border:1px solid var(--line)}
+.flag .pip{width:7px;height:7px;border-radius:50%;margin-top:4px;flex-shrink:0}
+.pip.r{background:var(--red)}.pip.y{background:var(--amber)}.pip.g{background:var(--accent)}
+.flag span{color:var(--ink-dim)}
+.loading,.err{text-align:center;padding:90px 20px;color:var(--ink-dim);font-family:'Spline Sans Mono',monospace}
+.err{background:rgba(248,113,113,.08);border:1px solid rgba(248,113,113,.3);color:#fca5a5;border-radius:12px;line-height:1.6;text-align:left;padding:16px}
+footer{margin-top:28px;padding-top:16px;border-top:1px solid var(--line);display:flex;justify-content:space-between;flex-wrap:wrap;gap:10px;font-family:'Spline Sans Mono',monospace;font-size:11px;color:var(--ink-faint)}
+@media(max-width:1080px){.kpis{grid-template-columns:repeat(3,1fr)}.grid,.grid-2,.fc-grid{grid-template-columns:1fr}.stat-row{grid-template-columns:repeat(2,1fr)}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="brand">
+      <div class="kicker">Northern Region Cement Co. · KSA</div>
+      <h1>Power Plant — Analytics Console</h1>
+      <div class="sub">9-Unit Diesel Generating Station · full-history KPI &amp; forecasting</div>
+    </div>
+    <div class="live"><span class="dot"></span> LIVE · <span id="meta">loading…</span> · <button id="refresh" style="margin-left:8px">↻ Refresh</button></div>
+  </header>
+  <div class="tabs" id="tabs">
+    <div class="tab active" data-t="overview">📊 Overview</div>
+    <div class="tab" data-t="explorer">🔬 KPI Explorer</div>
+    <div class="tab" data-t="fuel">🛢️ Fuel &amp; Tankers</div>
+    <div class="tab" data-t="forecast">🔮 Forecast</div>
+  </div>
+  <div id="app"><div class="loading">Loading master dataset…</div></div>
+  <footer>
+    <div>NRCC_Master_Data.csv · auto-synced via Apps Script</div>
+    <div>Analytics Console v3</div>
+  </footer>
+</div>
+<script>
+const CSV_URL = "https://raw.githubusercontent.com/USERNAME/REPO/main/NRCC_Master_Data.csv";
+const $=s=>document.querySelector(s);
+const $$=s=>document.querySelectorAll(s);
+const num=v=>(v===''||v==null)?NaN:Number(v);
+const fmt=(n,d=0)=>(n===''||n==null||isNaN(n))?'—':Number(n).toLocaleString('en-US',{minimumFractionDigits:d,maximumFractionDigits:d});
+function parseCSV(t){const rows=[];let i=0,f='',row=[],q=false;while(i<t.length){const c=t[i];if(q){if(c==='"'){if(t[i+1]==='"'){f+='"';i++;}else q=false;}else f+=c;}else{if(c==='"')q=true;else if(c===','){row.push(f);f='';}else if(c==='\n'){row.push(f);rows.push(row);row=[];f='';}else if(c==='\r'){}else f+=c;}i++;}if(f!==''||row.length){row.push(f);rows.push(row);}const head=rows.shift();return rows.filter(r=>r.length>1&&r[0]).map(r=>{const o={};head.forEach((h,j)=>o[h]=r[j]??'');return o;});}
+let DATA=[],TAB='overview',charts=[];
+const SUM_FIELDS=new Set(['gross_gen_kwh','aux_kwh','net_gen_kwh','export_kwh','total_hfo_kg','total_lfo_kg','total_fuel_kg','total_lo_topup_ltr','lo_gross_topup_ltr','lo_sweetening_ltr','sludge_disposed_kg','used_lo_disposed_ltr','fresh_lo_received_ltr','tankers_tank1','tankers_tank2','tankers_tank3','tankers_tank4','tankers_tank5','tankers_total','trans_loss_kwh']);
+for(let n=1;n<=9;n++){['run_hrs','gen_kwh','hfo_kg','lo_ltr','lo_gross_ltr','lo_sweet_ltr'].forEach(s=>SUM_FIELDS.add('dg'+n+'_'+s));}
+['bao901','bao902','bao903','bao904','bao905','bao906','bao907','bao909','bao910'].forEach(b=>SUM_FIELDS.add(b+'_kwh'));
+function killCharts(){charts.forEach(c=>c.destroy());charts=[];}
+function chartOpts(extra={}){return Object.assign({responsive:true,maintainAspectRatio:false,interaction:{mode:'index',intersect:false},plugins:{legend:{labels:{color:'#8a99ad',font:{family:'Spline Sans Mono',size:11},boxWidth:10,boxHeight:10,usePointStyle:true,pointStyle:'circle'}}},scales:{x:{grid:{color:'#161d29'},ticks:{color:'#5b6878',font:{family:'Spline Sans Mono',size:10},maxRotation:0,autoSkip:true,maxTicksLimit:12}},y:{grid:{color:'#161d29'},ticks:{color:'#5b6878',font:{family:'Spline Sans Mono',size:10}}}}},extra);}
+async function load(){
+  $('#app').innerHTML='<div class="loading">Loading master dataset…</div>';
+  try{
+    let txt;
+    if(typeof __LOCAL!=='undefined'){txt=__LOCAL;}
+    else{const res=await fetch(CSV_URL+'?t='+Date.now());if(!res.ok)throw new Error('HTTP '+res.status);txt=await res.text();}
+    DATA=parseCSV(txt);
+    if(!DATA.length)throw new Error('No data rows parsed.');
+    $('#meta').textContent=DATA.length+' days · '+DATA[0].date+' → '+DATA[DATA.length-1].date;
+    route();
+  }catch(e){$('#app').innerHTML='<div class="err">⚠ Could not load data — '+e.message+'<br><br>Check CSV_URL points to your public GitHub raw file.</div>';}
+}
+function route(){killCharts();
+  if(TAB==='overview')renderOverview();
+  else if(TAB==='explorer')renderExplorer();
+  else if(TAB==='fuel')renderFuel();
+  else if(TAB==='forecast')renderForecast();
+}
+let ovGran='daily',ovEnd=null;
+function periodRows(gran,endIdx){if(gran==='daily')return[DATA[endIdx]];const span=gran==='weekly'?7:30;return DATA.slice(Math.max(0,endIdx-span+1),endIdx+1);}
+function agg(rows,field){const vals=rows.map(r=>num(r[field])).filter(v=>!isNaN(v));if(!vals.length)return NaN;if(SUM_FIELDS.has(field))return vals.reduce((a,b)=>a+b,0);return vals.reduce((a,b)=>a+b,0)/vals.length;}
+function renderOverview(){
+  if(ovEnd===null)ovEnd=DATA.length-1;
+  const rows=periodRows(ovGran,ovEnd);
+  const r=DATA[ovEnd];
+  const prevRows=periodRows(ovGran,Math.max(0,ovEnd-rows.length));
+  const gran=ovGran;
+  const gross=agg(rows,'gross_gen_kwh'),exp=agg(rows,'export_kwh'),hfo=agg(rows,'total_hfo_kg');
+  const sfc=agg(rows,'sfc_g_kwh'),tloss=agg(rows,'trans_loss_pct');
+  let running=0,maint=0,stby=0;for(let n=1;n<=9;n++){const rh=num(r['dg'+n+'_run_hrs']);if(rh>0)running++;else if(num(r['dg'+n+'_maint_hrs'])>0||n===9)maint++;else stby++;}
+  const dlt=(f)=>{const a=agg(rows,f),b=agg(prevRows,f);if(isNaN(a)||isNaN(b)||b===0)return'';const d=(a-b)/b*100;return `<div class="delta ${d>=0?'up':'down'}">${d>=0?'▲':'▼'} ${Math.abs(d).toFixed(1)}% vs prev</div>`;};
+  const isAgg=gran!=='daily';const lab=isAgg?(gran==='weekly'?'7-day':'30-day'):'day';
+  const dateOpts=DATA.map((x,i)=>`<option value="${i}" ${i===ovEnd?'selected':''}>${x.date}</option>`).join('');
+  $('#app').innerHTML=`
+   <div class="bar-controls">
+     <label class="fld">Granularity<select id="ovGran">
+       <option value="daily" ${gran==='daily'?'selected':''}>Daily</option>
+       <option value="weekly" ${gran==='weekly'?'selected':''}>Weekly (7-day)</option>
+       <option value="monthly" ${gran==='monthly'?'selected':''}>Monthly (30-day)</option></select></label>
+     <label class="fld">Period end date<select id="ovEnd">${dateOpts}</select></label>
+     <div style="align-self:center;color:var(--ink-faint);font-family:'Spline Sans Mono',monospace;font-size:11px">${rows.length} day(s): ${rows[0].date} → ${rows[rows.length-1].date}</div>
+   </div>
+   <div class="kpis">
+    <div class="kpi"><div class="lab">Gross Gen (${lab})</div><div class="val">${fmt(gross/1000,1)}<span class="unit">MWh</span></div>${dlt('gross_gen_kwh')}</div>
+    <div class="kpi blue"><div class="lab">Export (${lab})</div><div class="val">${fmt(exp/1000,1)}<span class="unit">MWh</span></div>${dlt('export_kwh')}</div>
+    <div class="kpi ${sfc>225?'red':''}"><div class="lab">SFC ${isAgg?'avg':''}</div><div class="val">${fmt(sfc,1)}<span class="unit">g/kWh</span></div><div class="delta ${sfc<=225?'up':'down'}">target ≤ 225</div></div>
+    <div class="kpi amber"><div class="lab">HFO Burn (${lab})</div><div class="val">${fmt(hfo/1000,1)}<span class="unit">t</span></div>${dlt('total_hfo_kg')}</div>
+    <div class="kpi violet"><div class="lab">Units (last day)</div><div class="val">${running}<span class="unit">/9</span></div><div class="delta">${stby} stby · ${maint} maint</div></div>
+    <div class="kpi ${tloss<0||tloss>7?'red':''}"><div class="lab">Trans Loss ${isAgg?'avg':''}</div><div class="val">${fmt(tloss,1)}<span class="unit">%</span></div><div class="delta ${tloss>=0&&tloss<=7?'up':'down'}">limit ≤ 7%</div></div>
+   </div>
+   <div class="grid">
+     <div class="card"><h2>📈 Generation &amp; Export<span class="tag">last 21 days</span></h2><div class="chartbox"><canvas id="cGen"></canvas></div></div>
+     <div class="card"><h2>🛢️ HFO Tanks<span class="tag">latest · % of 10 m</span></h2>${tankBars(r)}</div>
+   </div>
+   <div class="grid-2">
+     <div class="card"><h2>🔥 SFC Trend<span class="tag">target 225</span></h2><div class="chartbox"><canvas id="cSfc"></canvas></div></div>
+     <div class="card"><h2>🚨 Flags &amp; Alerts<span class="tag">${r.date}</span></h2><div class="flags">${flagList(r)}</div></div>
+   </div>`;
+  const win=DATA.slice(Math.max(0,ovEnd-20),ovEnd+1);const L=win.map(x=>x.date.slice(5));
+  charts.push(new Chart($('#cGen'),{type:'line',data:{labels:L,datasets:[
+    {label:'Gross MWh',data:win.map(x=>num(x.gross_gen_kwh)/1000),borderColor:'#36d399',backgroundColor:'rgba(54,211,153,.12)',fill:true,tension:.35,borderWidth:2,pointRadius:0},
+    {label:'Export MWh',data:win.map(x=>num(x.export_kwh)/1000),borderColor:'#60a5fa',tension:.35,borderWidth:2,pointRadius:0}]},options:chartOpts()}));
+  charts.push(new Chart($('#cSfc'),{type:'line',data:{labels:L,datasets:[
+    {label:'SFC',data:win.map(x=>num(x.sfc_g_kwh)),borderColor:'#fbbf24',backgroundColor:'rgba(251,191,36,.12)',fill:true,tension:.35,borderWidth:2,pointRadius:0},
+    {label:'Target',data:win.map(()=>225),borderColor:'#f87171',borderDash:[5,4],borderWidth:1.5,pointRadius:0}]},options:chartOpts()}));
+  $('#ovGran').onchange=e=>{ovGran=e.target.value;route();};
+  $('#ovEnd').onchange=e=>{ovEnd=+e.target.value;route();};
+}
+function tankBars(r){
+  const tanks=[['Tank 1','Power Plant',num(r.hfo_tank1_m),50],['Tank 2','Line-1 Kiln',num(r.hfo_tank2_m),30],['Tank 3','Line-1 Kiln',num(r.hfo_tank3_m),30],['Tank 4','Line-2 Kiln',num(r.hfo_tank4_m),30],['Tank 5','Line-1 alt',num(r.hfo_tank5_m),30]];
+  return tanks.map(([nm,sub,v,thr])=>{const pct=isNaN(v)?0:v*10;const cls=pct<thr?(pct<thr*0.8?'crit':'warn'):'';return `<div class="tank"><div class="top"><div class="name">${nm}<small>${sub}</small></div><div class="fig">${fmt(v,2)} m · ${fmt(pct,0)}%</div></div><div class="barg ${cls}"><i style="width:${Math.min(pct,100)}%"></i></div></div>`;}).join('');
+}
+function flagList(r){const fl=(r.flags||'').split(';').filter(Boolean);if(!fl.length)return '<div class="flag"><span class="pip g"></span><span>No flags.</span></div>';return fl.map(f=>{const t=f.trim();const c=t.startsWith('RED')?'r':t.startsWith('GRN')?'g':'y';return `<div class="flag"><span class="pip ${c}"></span><span>${t.replace(/^(RED|YLW|GRN):/,'')}</span></div>`;}).join('');}
+let expCol='lo_gross_topup_ltr',expWin=31;
+function niceLabel(c){return c.replace(/_/g,' ');}
+function renderExplorer(){
+  const cols=Object.keys(DATA[0]).filter(c=>c!=='date'&&c!=='comments'&&c!=='flags');
+  const numeric=cols.filter(c=>DATA.some(r=>!isNaN(num(r[c]))));
+  if(!numeric.includes(expCol))expCol=numeric[0];
+  const opts=numeric.map(c=>`<option value="${c}" ${c===expCol?'selected':''}>${niceLabel(c)}</option>`).join('');
+  const win=DATA.slice(Math.max(0,DATA.length-expWin));
+  const vals=win.map(r=>num(r[expCol]));
+  const valid=vals.filter(v=>!isNaN(v));
+  const total=valid.reduce((a,b)=>a+b,0);
+  const avg=valid.length?total/valid.length:NaN;
+  const mx=valid.length?Math.max(...valid):NaN,mn=valid.length?Math.min(...valid):NaN;
+  const isSum=SUM_FIELDS.has(expCol);
+  $('#app').innerHTML=`
+   <div class="bar-controls">
+     <label class="fld">KPI / Column<select id="expCol" style="min-width:240px">${opts}</select></label>
+     <label class="fld">Window<select id="expWin">
+       <option value="7" ${expWin===7?'selected':''}>Last 7 days</option>
+       <option value="14" ${expWin===14?'selected':''}>Last 14 days</option>
+       <option value="31" ${expWin===31?'selected':''}>Last 31 days</option>
+       <option value="9999" ${expWin===9999?'selected':''}>Full history</option></select></label>
+   </div>
+   <div class="stat-row">
+     <div class="stat"><div class="l">${isSum?'Total':'Mean'} over period</div><div class="n">${fmt(isSum?total:avg,2)}</div></div>
+     <div class="stat"><div class="l">Daily average</div><div class="n">${fmt(avg,2)}</div></div>
+     <div class="stat"><div class="l">Max</div><div class="n">${fmt(mx,2)}</div></div>
+     <div class="stat"><div class="l">Min</div><div class="n">${fmt(mn,2)}</div></div>
+   </div>
+   <div class="card full"><h2>📉 ${niceLabel(expCol)}<span class="tag">${win.length} days · ${win[0].date} → ${win[win.length-1].date}</span></h2><div class="chartbox tall"><canvas id="cExp"></canvas></div></div>
+   <div class="card full" style="margin-top:15px"><h2>📋 Daily values<span class="tag">most recent first</span></h2>
+     <div class="tbl-scroll"><table><thead><tr><th>Date</th><th>${niceLabel(expCol)}</th><th>Δ day</th></tr></thead><tbody>
+     ${[...win].reverse().map((r,i,arr)=>{const v=num(r[expCol]);const prev=arr[i+1]?num(arr[i+1][expCol]):NaN;const d=(!isNaN(v)&&!isNaN(prev))?v-prev:NaN;return `<tr><td>${r.date}</td><td><b>${fmt(v,2)}</b></td><td class="${d>0?'up':d<0?'down':''}">${isNaN(d)?'—':(d>=0?'+':'')+fmt(d,2)}</td></tr>`;}).join('')}
+     </tbody></table></div></div>`;
+  const L=win.map(x=>x.date.slice(5));
+  charts.push(new Chart($('#cExp'),{type:'line',data:{labels:L,datasets:[{label:niceLabel(expCol),data:vals,borderColor:'#a78bfa',backgroundColor:'rgba(167,139,250,.14)',fill:true,tension:.3,borderWidth:2,pointRadius:2,pointBackgroundColor:'#a78bfa',spanGaps:true}]},options:chartOpts()}));
+  $('#expCol').onchange=e=>{expCol=e.target.value;route();};
+  $('#expWin').onchange=e=>{expWin=+e.target.value;route();};
+}
+let fuelWin=31;
+function renderFuel(){
+  const win=DATA.slice(Math.max(0,DATA.length-fuelWin));
+  const L=win.map(x=>x.date.slice(5));
+  const tankerTot=[1,2,3,4,5].map(t=>win.reduce((a,r)=>a+(num(r['tankers_tank'+t])||0),0));
+  const grandTankers=tankerTot.reduce((a,b)=>a+b,0);
+  const r=DATA[DATA.length-1];
+  $('#app').innerHTML=`
+   <div class="bar-controls">
+     <label class="fld">Window<select id="fuelWin">
+       <option value="7" ${fuelWin===7?'selected':''}>Last 7 days</option>
+       <option value="14" ${fuelWin===14?'selected':''}>Last 14 days</option>
+       <option value="31" ${fuelWin===31?'selected':''}>Last 31 days</option>
+       <option value="9999" ${fuelWin===9999?'selected':''}>Full history</option></select></label>
+     <div style="align-self:center;color:var(--ink-faint);font-family:'Spline Sans Mono',monospace;font-size:11px">${win.length} days · ${win[0].date} → ${win[win.length-1].date}</div>
+   </div>
+   <div class="stat-row" style="grid-template-columns:repeat(6,1fr)">
+     ${[1,2,3,4,5].map(t=>`<div class="stat"><div class="l">Tankers → Tank ${t}</div><div class="n">${tankerTot[t-1]}</div></div>`).join('')}
+     <div class="stat"><div class="l">Total tankers</div><div class="n">${grandTankers}</div></div>
+   </div>
+   <div class="grid-2">
+     <div class="card"><h2>🚚 Tanker Receipts by Tank<span class="tag">per-tank, period total</span></h2><div class="chartbox"><canvas id="cTanker"></canvas></div></div>
+     <div class="card"><h2>🔥 HFO Burn vs Receipts<span class="tag">daily kg vs tankers</span></h2><div class="chartbox"><canvas id="cBurn"></canvas></div></div>
+   </div>
+   <div class="card full"><h2>📊 HFO Tank Levels (m)<span class="tag">all 5 tanks · trend</span></h2><div class="chartbox tall"><canvas id="cLevels"></canvas></div></div>
+   <div class="card full" style="margin-top:15px"><h2>🛢️ Latest Tank Status &amp; Days-of-Stock<span class="tag">${r.date}</span></h2>
+     <div class="tbl-scroll"><table><thead><tr><th>Tank</th><th>Service</th><th>Level (m)</th><th>%</th><th>Avg drop/day*</th><th>Days to empty*</th></tr></thead><tbody>
+     ${tankStockTable(win)}
+     </tbody></table></div>
+     <div class="note">* Drop/day from days with NO tanker receipt for that tank (refill days excluded), per zero-tanker isolation rule. Tank 4 baseline ≈ 0.37 m/day. Static tanks (e.g. Tank 5 when Line-1 on Tank 2/3) show no drawdown — normal.</div>
+   </div>`;
+  charts.push(new Chart($('#cTanker'),{type:'bar',data:{labels:['Tank 1','Tank 2','Tank 3','Tank 4','Tank 5'],datasets:[{label:'Tankers',data:tankerTot,backgroundColor:['#36d399','#60a5fa','#a78bfa','#fbbf24','#f472b6'],borderRadius:6}]},options:chartOpts({plugins:{legend:{display:false}}})}));
+  charts.push(new Chart($('#cBurn'),{data:{labels:L,datasets:[
+    {type:'line',label:'HFO kg',data:win.map(x=>num(x.total_hfo_kg)),borderColor:'#fbbf24',backgroundColor:'rgba(251,191,36,.1)',fill:true,tension:.3,borderWidth:2,pointRadius:0,yAxisID:'y'},
+    {type:'bar',label:'Tankers (all)',data:win.map(x=>num(x.tankers_total)||0),backgroundColor:'rgba(96,165,250,.5)',yAxisID:'y1'}]},
+    options:chartOpts({scales:{x:{grid:{color:'#161d29'},ticks:{color:'#5b6878',font:{family:'Spline Sans Mono',size:10},maxTicksLimit:12}},y:{position:'left',grid:{color:'#161d29'},ticks:{color:'#5b6878',font:{family:'Spline Sans Mono',size:10}}},y1:{position:'right',grid:{display:false},ticks:{color:'#5b6878',font:{family:'Spline Sans Mono',size:10}}}}})}));
+  const tc=['#36d399','#60a5fa','#a78bfa','#fbbf24','#f472b6'];
+  charts.push(new Chart($('#cLevels'),{type:'line',data:{labels:L,datasets:[1,2,3,4,5].map((t,i)=>({label:'Tank '+t,data:win.map(x=>num(x['hfo_tank'+t+'_m'])),borderColor:tc[i],tension:.3,borderWidth:2,pointRadius:0,spanGaps:true}))},options:chartOpts()}));
+  $('#fuelWin').onchange=e=>{fuelWin=+e.target.value;route();};
+}
+function avgDropPerDay(win,tankField,tankerField){
+  let drops=[];
+  for(let i=1;i<win.length;i++){const tk=num(win[i][tankerField])||0;const a=num(win[i-1][tankField]),b=num(win[i][tankField]);if(tk===0&&!isNaN(a)&&!isNaN(b)){const d=a-b;if(d>0)drops.push(d);}}
+  if(!drops.length)return NaN;return drops.reduce((x,y)=>x+y,0)/drops.length;
+}
+function tankStockTable(win){
+  const svc=['Power Plant','Line-1 Kiln','Line-1 Kiln','Line-2 Kiln','Line-1 alt'];
+  const r=win[win.length-1];let out='';
+  for(let t=1;t<=5;t++){const lvl=num(r['hfo_tank'+t+'_m']);const pct=isNaN(lvl)?NaN:lvl*10;const drop=avgDropPerDay(win,'hfo_tank'+t+'_m','tankers_tank'+t);const days=(!isNaN(drop)&&drop>0&&!isNaN(lvl))?lvl/drop:NaN;out+=`<tr><td>Tank ${t}</td><td>${svc[t-1]}</td><td><b>${fmt(lvl,2)}</b></td><td>${fmt(pct,0)}%</td><td>${isNaN(drop)?'static / refill':fmt(drop,3)+' m'}</td><td>${isNaN(days)?'—':'<b>'+fmt(days,0)+'</b>'}</td></tr>`;}
+  return out;
+}
+let fcTank=4,fcTankersDay=null,fcWin=14;
+function renderForecast(){
+  const win=DATA.slice(Math.max(0,DATA.length-fcWin));
+  const r=DATA[DATA.length-1];
+  const lvl=num(r['hfo_tank'+fcTank+'_m']);
+  const baseDrop=avgDropPerDay(win,'hfo_tank'+fcTank+'_m','tankers_tank'+fcTank);
+  const m3perM={1:350,2:350,3:350,4:1100,5:1000}[fcTank];
+  const tPerTanker=26,density=0.98;
+  const mPerTanker=(tPerTanker/density)/m3perM;
+  if(fcTankersDay===null)fcTankersDay=0;
+  const dailyAdd=fcTankersDay*mPerTanker;
+  const netDaily=baseDrop-dailyAdd;
+  let etaEmpty=NaN,eta30=NaN;
+  if(!isNaN(netDaily)){if(netDaily>0){etaEmpty=lvl/netDaily;eta30=(lvl-3.0)/netDaily;}else etaEmpty=Infinity;}
+  const sl=num(r.sludge_tank_pct);
+  const slWin=DATA.slice(Math.max(0,DATA.length-7));
+  let slRates=[];for(let i=1;i<slWin.length;i++){const a=num(slWin[i-1].sludge_tank_pct),b=num(slWin[i].sludge_tank_pct);if(!isNaN(a)&&!isNaN(b)&&b>=a)slRates.push(b-a);}
+  const slRate=slRates.length?slRates.reduce((x,y)=>x+y,0)/slRates.length:3.2;
+  const slToThr=sl<70?(70-sl)/slRate:0;
+  const lo=num(r.lo_stock_ltr);
+  const loWin=DATA.slice(Math.max(0,DATA.length-fcWin));
+  let loUse=[];for(let i=1;i<loWin.length;i++){const a=num(loWin[i-1].lo_stock_ltr),b=num(loWin[i].lo_stock_ltr);if(!isNaN(a)&&!isNaN(b)&&a>b)loUse.push(a-b);}
+  const loRate=loUse.length?loUse.reduce((x,y)=>x+y,0)/loUse.length:NaN;
+  const loDays=(!isNaN(loRate)&&loRate>0)?(lo-5000)/loRate:NaN;
+  $('#app').innerHTML=`
+   <div class="bar-controls">
+     <label class="fld">Baseline window<select id="fcWin">
+       <option value="7" ${fcWin===7?'selected':''}>Last 7 days</option>
+       <option value="14" ${fcWin===14?'selected':''}>Last 14 days</option>
+       <option value="31" ${fcWin===31?'selected':''}>Last 31 days</option></select></label>
+   </div>
+   <div class="fc-grid">
+     <div class="card"><h2>🛢️ HFO Stock Forecast<span class="tag">interactive</span></h2>
+       <div class="fc-input">
+         <div class="ln"><span>Tank</span><select id="fcTank">${[1,2,3,4,5].map(t=>`<option value="${t}" ${t===fcTank?'selected':''}>Tank ${t}</option>`).join('')}</select></div>
+         <div class="ln"><span>Current level</span><b class="mono">${fmt(lvl,2)} m (${fmt(lvl*10,0)}%)</b></div>
+         <div class="ln"><span>Baseline drop/day (zero-tanker)</span><b class="mono">${isNaN(baseDrop)?'n/a':fmt(baseDrop,3)+' m'}</b></div>
+         <div class="ln"><span>Assumed tankers/day →</span><input id="fcTk" type="number" min="0" step="1" value="${fcTankersDay}"></div>
+         <div class="ln"><span>Each tanker adds</span><b class="mono">${fmt(mPerTanker,3)} m</b></div>
+       </div>
+       <div class="result">
+         <div class="cap">Net change/day</div>
+         <div class="big" style="color:${netDaily>0?'var(--amber)':'var(--accent)'}">${isNaN(netDaily)?'—':(netDaily>0?'-':'+')+fmt(Math.abs(netDaily),3)+' m'}</div>
+         <div class="cap" style="margin-top:10px">${netDaily>0?'Days until empty':'Net filling'}: <b style="color:var(--ink)">${etaEmpty===Infinity?'never (filling)':isNaN(etaEmpty)?'—':fmt(etaEmpty,0)+' days'}</b></div>
+         ${(!isNaN(eta30)&&netDaily>0)?`<div class="cap">Days to 30% reserve (3.0 m): <b style="color:var(--amber)">${eta30>0?fmt(eta30,0)+' days':'already below'}</b></div>`:''}
+       </div>
+       <div class="note">Tanker = 26 t ÷ 0.98 t/m³ ÷ ${m3perM} m³/m = ${fmt(mPerTanker,3)} m/tanker. To hold Tank ${fcTank} steady: ≈ ${isNaN(baseDrop)?'—':fmt(baseDrop/mPerTanker,1)} tankers/day.</div>
+     </div>
+     <div class="card"><h2>♻️ Sludge Disposal Forecast<span class="tag">70% threshold</span></h2>
+       <div class="fc-input">
+         <div class="ln"><span>Current sludge level</span><b class="mono">${fmt(sl,0)}%</b></div>
+         <div class="ln"><span>Accumulation rate (7-day)</span><b class="mono">${fmt(slRate,2)} %/day</b></div>
+       </div>
+       <div class="result">
+         <div class="cap">${sl>=70?'⚠ At/over disposal threshold':'Days until 70% threshold'}</div>
+         <div class="big" style="color:${sl>=70?'var(--red)':slToThr<3?'var(--amber)':'var(--accent)'}">${sl>=70?'DISPOSE NOW':fmt(slToThr,0)+' days'}</div>
+       </div>
+       <div class="note">Sludge accumulation is load-independent (~3.0–3.5 %/day) — crankcase blowby & separator operation.</div>
+     </div>
+   </div>
+   <div class="grid-2" style="margin-top:0">
+     <div class="card"><h2>🔧 Lube Oil Runway<span class="tag">Argina S4-40</span></h2>
+       <div class="fc-input">
+         <div class="ln"><span>Current LO stock</span><b class="mono">${fmt(lo,0)} L</b></div>
+         <div class="ln"><span>Avg consumption/day (${fcWin}d)</span><b class="mono">${isNaN(loRate)?'n/a':fmt(loRate,0)+' L'}</b></div>
+       </div>
+       <div class="result">
+         <div class="cap">Days until 5,000 L critical reserve</div>
+         <div class="big" style="color:${isNaN(loDays)?'var(--ink-dim)':loDays<14?'var(--amber)':'var(--accent)'}">${isNaN(loDays)?'—':loDays<0?'below reserve':fmt(loDays,0)+' days'}</div>
+       </div>
+     </div>
+     <div class="card"><h2>📈 Tank ${fcTank} Level Projection<span class="tag">next 14 days</span></h2><div class="chartbox"><canvas id="cFc"></canvas></div></div>
+   </div>`;
+  const hist=win.map(x=>({d:x.date.slice(5),v:num(x['hfo_tank'+fcTank+'_m'])}));
+  const fwdLabels=[],fwd=[];let cur=lvl;
+  for(let d=1;d<=14;d++){cur=cur-(isNaN(netDaily)?0:netDaily);fwdLabels.push('+'+d+'d');fwd.push(Math.max(cur,0));}
+  const labels=hist.map(h=>h.d).concat(fwdLabels);
+  const histData=hist.map(h=>h.v).concat(new Array(14).fill(null));
+  const fwdData=new Array(hist.length).fill(null);fwdData[hist.length-1]=lvl;fwd.forEach(v=>fwdData.push(v));
+  charts.push(new Chart($('#cFc'),{type:'line',data:{labels,datasets:[
+    {label:'Actual',data:histData,borderColor:'#60a5fa',tension:.3,borderWidth:2,pointRadius:0,spanGaps:true},
+    {label:'Projected',data:fwdData,borderColor:'#fbbf24',borderDash:[5,4],tension:.3,borderWidth:2,pointRadius:0,spanGaps:true},
+    {label:'30% reserve',data:labels.map(()=>3.0),borderColor:'#f87171',borderDash:[2,3],borderWidth:1,pointRadius:0}]},options:chartOpts()}));
+  $('#fcTank').onchange=e=>{fcTank=+e.target.value;fcTankersDay=null;route();};
+  $('#fcWin').onchange=e=>{fcWin=+e.target.value;route();};
+  $('#fcTk').oninput=e=>{fcTankersDay=Math.max(0,+e.target.value||0);route();setTimeout(()=>{const el=$('#fcTk');if(el){el.focus();el.setSelectionRange(el.value.length,el.value.length);}},0);};
+}
+$$('#tabs .tab').forEach(t=>t.onclick=()=>{$$('#tabs .tab').forEach(x=>x.classList.remove('active'));t.classList.add('active');TAB=t.dataset.t;route();});
+$('#refresh').onclick=load;
+load();
+</script>
+</body>
+</html>
