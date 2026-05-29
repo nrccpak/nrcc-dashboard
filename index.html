@@ -94,6 +94,20 @@ footer{margin-top:28px;padding-top:16px;border-top:1px solid var(--line);display
 .sub-tab{font-family:'Spline Sans Mono',monospace;font-size:12px;background:var(--panel-2);color:var(--ink-dim);border:1px solid var(--line);border-radius:8px;padding:7px 15px;cursor:pointer;transition:.15s}
 .sub-tab:hover{color:var(--ink);border-color:var(--ink-faint)}
 .sub-tab.active{background:rgba(96,165,250,.12);color:var(--blue);border-color:var(--blue)}
+.cmp-builder{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:16px 18px;margin-bottom:15px}
+.cmp-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;flex-wrap:wrap;gap:10px}
+.cmp-series-list{display:flex;flex-wrap:wrap;gap:8px;min-height:38px;margin-bottom:12px;align-items:center}
+.cmp-item{display:flex;align-items:center;gap:7px;background:var(--panel-2);border:1px solid var(--line);border-radius:8px;padding:6px 10px;font-family:'Spline Sans Mono',monospace;font-size:11px}
+.cmp-dot{width:9px;height:9px;border-radius:50%;flex-shrink:0}
+.cmp-lbl{color:var(--ink)}
+.cmp-unit-badge{color:var(--ink-faint);font-size:10px;padding:1px 5px;background:var(--grid);border-radius:4px;font-family:'Spline Sans Mono',monospace}
+.cmp-rm{background:none;border:none;color:var(--ink-faint);cursor:pointer;padding:0 0 0 4px;font-size:13px;line-height:1;transition:.15s}
+.cmp-rm:hover{color:var(--red)}
+.cmp-add-row{display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap}
+.mode-toggle{display:flex;gap:4px}
+.mode-btn{font-family:'Spline Sans Mono',monospace;font-size:11.5px;background:var(--panel-2);color:var(--ink-dim);border:1px solid var(--line);border-radius:7px;padding:6px 13px;cursor:pointer;transition:.15s}
+.mode-btn.active{background:rgba(54,211,153,.14);color:var(--accent);border-color:var(--accent)}
+.cmp-empty{color:var(--ink-faint);font-family:'Spline Sans Mono',monospace;font-size:11px;padding:4px 0}
 </style>
 </head>
 <body>
@@ -112,6 +126,7 @@ footer{margin-top:28px;padding-top:16px;border-top:1px solid var(--line);display
     <div class="tab" data-t="fuel">🛢️ Fuel &amp; Tankers</div>
     <div class="tab" data-t="forecast">🔮 Forecast</div>
     <div class="tab" data-t="reports">📋 Reports</div>
+    <div class="tab" data-t="compare">🔀 Compare</div>
   </div>
   <div id="app"><div class="loading">Loading master dataset…</div></div>
   <footer>
@@ -150,6 +165,7 @@ function route(){killCharts();
   else if(TAB==='fuel')renderFuel();
   else if(TAB==='forecast')renderForecast();
   else if(TAB==='reports')renderReports();
+  else if(TAB==='compare')renderCompare();
 }
 let ovGran='daily',ovEnd=null;
 function periodRows(gran,endIdx){if(gran==='daily')return[DATA[endIdx]];const span=gran==='weekly'?7:30;return DATA.slice(Math.max(0,endIdx-span+1),endIdx+1);}
@@ -208,6 +224,8 @@ function tankBars(r){
 function flagList(r){const fl=(r.flags||'').split(';').filter(Boolean);if(!fl.length)return '<div class="flag"><span class="pip g"></span><span>No flags.</span></div>';return fl.map(f=>{const t=f.trim();const c=t.startsWith('RED')?'r':t.startsWith('GRN')?'g':'y';return `<div class="flag"><span class="pip ${c}"></span><span>${t.replace(/^(RED|YLW|GRN):/,'')}</span></div>`;}).join('');}
 let expCol='lo_gross_topup_ltr',expWin=31,expSearch='';
 let reportType='generation',reportWin=31;
+const PALETTE=['#36d399','#60a5fa','#a78bfa','#fbbf24','#f472b6','#2dd4bf','#818cf8','#fb923c','#a3e635','#e879f9','#38bdf8','#4ade80'];
+let CATALOG=null,cmpSeries=[],cmpMode='trend',cmpWin=31,cmpNextId=0,cmpCat='Generation';
 function niceLabel(c){return c.replace(/_/g,' ');}
 function renderExplorer(){
   const cols=Object.keys(DATA[0]).filter(c=>c!=='date'&&c!=='comments'&&c!=='flags');
@@ -539,6 +557,125 @@ function renderLOReport(win,controls){
   ]},options:chartOpts()}));
   const nzLo=dgs.map((n,i)=>({l:'DG '+n,v:dgLo[i],c:dgColors[i]})).filter(x=>x.v>0);
   if(nzLo.length)charts.push(new Chart($('#cDgLo'),{type:'bar',data:{labels:nzLo.map(x=>x.l),datasets:[{data:nzLo.map(x=>x.v),backgroundColor:nzLo.map(x=>x.c),borderRadius:6}]},options:chartOpts({plugins:{legend:{display:false}}})}));
+}
+function buildCatalog(){
+  const c=[];
+  for(let n=1;n<=9;n++)c.push({cat:'Generation',field:'dg'+n+'_gen_kwh',label:'DG '+n+' Generation',unit:'kWh'});
+  [{f:'gross_gen_kwh',l:'Gross Gen (Plant)'},{f:'net_gen_kwh',l:'Net Gen (Plant)'},{f:'export_kwh',l:'Export (Plant)'},{f:'aux_kwh',l:'Aux Consumption'}].forEach(x=>c.push({cat:'Generation',field:x.f,label:x.l,unit:'kWh'}));
+  for(let n=1;n<=9;n++)c.push({cat:'Run Hours',field:'dg'+n+'_run_hrs',label:'DG '+n+' Run',unit:'hrs'});
+  for(let n=1;n<=9;n++)c.push({cat:'Run Hours',field:'dg'+n+'_standby_hrs',label:'DG '+n+' Standby',unit:'hrs'});
+  for(let n=1;n<=9;n++)c.push({cat:'Run Hours',field:'dg'+n+'_maint_hrs',label:'DG '+n+' Maintenance',unit:'hrs'});
+  for(let n=1;n<=9;n++)c.push({cat:'Run Hours',field:'dg'+n+'_breakdown_hrs',label:'DG '+n+' Breakdown',unit:'hrs'});
+  for(let n=1;n<=9;n++)c.push({cat:'Fuel (HFO)',field:'dg'+n+'_hfo_kg',label:'DG '+n+' HFO',unit:'kg'});
+  c.push({cat:'Fuel (HFO)',field:'total_hfo_kg',label:'Total HFO (Plant)',unit:'kg'});
+  c.push({cat:'Fuel (HFO)',field:'total_lfo_kg',label:'Total LFO (Plant)',unit:'kg'});
+  c.push({cat:'Fuel (HFO)',field:'sfc_g_kwh',label:'SFC (Plant)',unit:'g/kWh'});
+  for(let n=1;n<=9;n++)c.push({cat:'Lube Oil',field:'dg'+n+'_lo_ltr',label:'DG '+n+' LO Topup',unit:'L'});
+  for(let n=1;n<=9;n++)c.push({cat:'Lube Oil',field:'dg'+n+'_lo_gross_ltr',label:'DG '+n+' LO Gross',unit:'L'});
+  for(let n=1;n<=9;n++)c.push({cat:'Lube Oil',field:'dg'+n+'_lo_sweet_ltr',label:'DG '+n+' LO Sweet',unit:'L'});
+  c.push({cat:'Lube Oil',field:'total_lo_topup_ltr',label:'Total LO Topup',unit:'L'});
+  c.push({cat:'Lube Oil',field:'lo_stock_ltr',label:'LO Stock',unit:'L'});
+  c.push({cat:'Lube Oil',field:'lo_sweetening_ltr',label:'Total LO Sweetening',unit:'L'});
+  for(let n=1;n<=9;n++)c.push({cat:'Power (MW)',field:'dg'+n+'_mw',label:'DG '+n+' Load',unit:'MW'});
+  for(let t=1;t<=5;t++)c.push({cat:'Tank Levels',field:'hfo_tank'+t+'_m',label:'HFO Tank '+t,unit:'m'});
+  c.push({cat:'Tank Levels',field:'day_tank1_m',label:'Day Tank 1',unit:'m'});
+  c.push({cat:'Tank Levels',field:'buffer_tank1_m',label:'Buffer Tank 1',unit:'m'});
+  c.push({cat:'Tank Levels',field:'lfo_tank_m',label:'LFO Tank',unit:'m'});
+  c.push({cat:'Tank Levels',field:'sludge_tank_pct',label:'Sludge Tank',unit:'%'});
+  for(let t=1;t<=5;t++)c.push({cat:'Tankers',field:'tankers_tank'+t,label:'Tankers → Tank '+t,unit:'count'});
+  c.push({cat:'Tankers',field:'tankers_total',label:'Total Tankers',unit:'count'});
+  ['901','902','903','904','905','906','907','909','910'].forEach(n=>c.push({cat:'BAO Meters',field:'bao'+n+'_kwh',label:'BAO '+n,unit:'kWh'}));
+  c.push({cat:'BAO Meters',field:'aux_baa901_kwh',label:'Aux BAA901',unit:'kWh'});
+  c.push({cat:'BAO Meters',field:'aux_baa903_kwh',label:'Aux BAA903',unit:'kWh'});
+  c.push({cat:'BAO Meters',field:'aux_baa906_kwh',label:'Aux BAA906',unit:'kWh'});
+  c.push({cat:'Other',field:'trans_loss_kwh',label:'Trans Loss',unit:'kWh'});
+  c.push({cat:'Other',field:'trans_loss_pct',label:'Trans Loss %',unit:'%'});
+  c.push({cat:'Other',field:'used_lo_pct',label:'Used LO %',unit:'%'});
+  return c;
+}
+function cmpEnsureInit(){
+  if(!CATALOG)CATALOG=buildCatalog();
+  if(!cmpSeries.length){
+    ['dg1_gen_kwh','dg2_gen_kwh','dg3_gen_kwh'].forEach((f,i)=>{
+      const e=CATALOG.find(x=>x.field===f);
+      if(e)cmpSeries.push({id:i,field:e.field,label:e.label,unit:e.unit,color:PALETTE[i]});
+    });
+    cmpNextId=3;
+  }
+}
+function renderCompare(){
+  cmpEnsureInit();
+  const win=DATA.slice(cmpWin===9999?0:Math.max(0,DATA.length-cmpWin));
+  const trendL=win.map(x=>x.date.slice(5));
+  const cats=[...new Set(CATALOG.map(x=>x.cat))];
+  const catItems=CATALOG.filter(x=>x.cat===cmpCat);
+  const has=cmpSeries.length>0;
+  const chips=has
+    ?cmpSeries.map(s=>`<div class="cmp-item"><span class="cmp-dot" style="background:${s.color}"></span><span class="cmp-lbl">${s.label}</span><span class="cmp-unit-badge">${s.unit}</span><button class="cmp-rm" data-id="${s.id}">✕</button></div>`).join('')+'<button id="cmpClear" style="font-family:\'Spline Sans Mono\',monospace;font-size:11px;color:var(--ink-faint);background:none;border:1px dashed var(--line);border-radius:7px;padding:5px 10px;cursor:pointer;margin-left:4px">Clear all</button>'
+    :'<div class="cmp-empty">No series yet — pick a category and metric below, then click + Add</div>';
+  $('#app').innerHTML=`
+   <div class="cmp-builder">
+     <div class="cmp-header">
+       <div style="font-family:'Spline Sans Mono',monospace;font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-faint)">Active Series (${cmpSeries.length}/12)</div>
+       <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+         <div class="mode-toggle"><button class="mode-btn${cmpMode==='trend'?' active':''}" id="modeTrend">📈 Trend Lines</button><button class="mode-btn${cmpMode==='bar'?' active':''}" id="modeBar">📊 Period Total</button></div>
+         <label class="fld" style="margin:0;flex-direction:row;align-items:center;gap:6px;font-size:10px">Window<select id="cmpWin" style="margin:0"><option value="7" ${cmpWin===7?'selected':''}>Last 7d</option><option value="14" ${cmpWin===14?'selected':''}>Last 14d</option><option value="31" ${cmpWin===31?'selected':''}>Last 31d</option><option value="9999" ${cmpWin===9999?'selected':''}>All history</option></select></label>
+       </div>
+     </div>
+     <div class="cmp-series-list">${chips}</div>
+     <div class="cmp-add-row">
+       <label class="fld">Category<select id="cmpCatSel">${cats.map(cat=>`<option value="${cat}" ${cat===cmpCat?'selected':''}>${cat}</option>`).join('')}</select></label>
+       <label class="fld">Metric<select id="cmpFieldSel" style="min-width:240px">${catItems.map(itm=>`<option value="${itm.field}" ${cmpSeries.find(s=>s.field===itm.field)?'disabled':''}>${itm.label} (${itm.unit})${cmpSeries.find(s=>s.field===itm.field)?' ✓':''}</option>`).join('')}</select></label>
+       <button id="cmpAdd" style="align-self:flex-end;background:linear-gradient(180deg,rgba(54,211,153,.18),rgba(54,211,153,.06));color:var(--accent);border-color:var(--accent);padding:9px 18px">+ Add Series</button>
+     </div>
+   </div>
+   ${has?`
+   <div class="card" style="margin-bottom:15px"><h2>📊 Comparison Chart<span class="tag">${win.length} days · ${win[0].date} → ${win[win.length-1].date}</span></h2>
+     ${cmpSeries.length>2?`<div style="font-family:'Spline Sans Mono',monospace;font-size:10.5px;color:var(--ink-faint);margin-bottom:10px">Dual Y-axis active: left = ${[...new Set(cmpSeries.map(s=>s.unit))][0]}${[...new Set(cmpSeries.map(s=>s.unit))][1]?' · right = '+[...new Set(cmpSeries.map(s=>s.unit))][1]:''}</div>`:''}
+     <div class="chartbox tall"><canvas id="cCmp"></canvas></div></div>
+   <div class="card full"><h2>📋 Summary<span class="tag">period totals &amp; averages</span></h2>
+     <div class="tbl-scroll"><table><thead><tr><th>Series</th><th>Unit</th><th>Total</th><th>Avg / day</th><th>Max</th><th>Min</th></tr></thead><tbody>
+     ${cmpSeries.map(s=>{const v=win.map(r=>num(r[s.field])).filter(x=>!isNaN(x));const tot=v.reduce((a,b)=>a+b,0);const avg=v.length?tot/v.length:NaN;const mx=v.length?Math.max(...v):NaN;const mn=v.length?Math.min(...v):NaN;return`<tr><td><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${s.color};margin-right:7px;vertical-align:middle"></span><b>${s.label}</b></td><td><span class="cmp-unit-badge">${s.unit}</span></td><td>${fmt(tot,2)}</td><td>${fmt(avg,2)}</td><td>${fmt(mx,2)}</td><td>${fmt(mn,2)}</td></tr>`;}).join('')}
+     </tbody></table></div></div>`
+   :'<div class="card" style="text-align:center;padding:60px 20px;color:var(--ink-faint);font-family:\'Spline Sans Mono\',monospace">Add at least one series above to see the chart</div>'}`;
+
+  if(has){
+    const units=[...new Set(cmpSeries.map(s=>s.unit))];
+    const u1=units[0],u2=units[1];
+    const makeY=(pos,title,showGrid)=>({position:pos,grid:{color:showGrid?'#161d29':'transparent',display:showGrid},ticks:{color:'#5b6878',font:{family:'Spline Sans Mono',size:10}},title:{display:!!title,text:title||'',color:'#8a99ad',font:{size:10,family:'Spline Sans Mono'}}});
+    const xAxis={grid:{color:'#161d29'},ticks:{color:'#5b6878',font:{family:'Spline Sans Mono',size:10},maxRotation:30,autoSkip:true,maxTicksLimit:14}};
+    if(cmpMode==='trend'){
+      const ds=cmpSeries.map(s=>({label:s.label,data:win.map(r=>num(r[s.field])),borderColor:s.color,backgroundColor:s.color+'18',fill:false,tension:.3,borderWidth:2,pointRadius:0,spanGaps:true,yAxisID:s.unit===u1?'y':'y1'}));
+      const scales={x:xAxis,y:makeY('left',u2?u1:'',true)};
+      if(u2)scales.y1=makeY('right',u2,false);
+      charts.push(new Chart($('#cCmp'),{type:'line',data:{labels:trendL,datasets:ds},options:chartOpts({scales})}));
+    } else {
+      const totals=cmpSeries.map(s=>{const v=win.map(r=>num(r[s.field])).filter(x=>!isNaN(x));return SUM_FIELDS.has(s.field)?v.reduce((a,b)=>a+b,0):(v.length?v.reduce((a,b)=>a+b,0)/v.length:0);});
+      const labels=cmpSeries.map(s=>s.label);
+      if(units.length===1){
+        charts.push(new Chart($('#cCmp'),{type:'bar',data:{labels,datasets:[{data:totals,backgroundColor:cmpSeries.map(s=>s.color),borderRadius:6}]},options:chartOpts({plugins:{legend:{display:false}},scales:{x:xAxis,y:makeY('left',u1,true)}})}));
+      } else {
+        const ds=units.slice(0,2).map((u,ui)=>({label:u,data:cmpSeries.map((s,i)=>s.unit===u?totals[i]:null),backgroundColor:cmpSeries.map(s=>s.unit===u?s.color:'rgba(0,0,0,0)'),borderRadius:6,yAxisID:ui===0?'y':'y1'}));
+        charts.push(new Chart($('#cCmp'),{type:'bar',data:{labels,datasets:ds},options:chartOpts({scales:{x:xAxis,y:makeY('left',units[0],true),y1:makeY('right',units[1],false)}})}));
+      }
+    }
+  }
+
+  $('#modeTrend').onclick=()=>{cmpMode='trend';renderCompare();};
+  $('#modeBar').onclick=()=>{cmpMode='bar';renderCompare();};
+  $('#cmpWin').onchange=e=>{cmpWin=+e.target.value;renderCompare();};
+  $('#cmpCatSel').onchange=e=>{cmpCat=e.target.value;renderCompare();};
+  $('#cmpAdd').onclick=()=>{
+    const field=$('#cmpFieldSel').value;
+    if(!field||cmpSeries.find(s=>s.field===field)||cmpSeries.length>=12)return;
+    const entry=CATALOG.find(x=>x.field===field);
+    if(!entry)return;
+    const id=cmpNextId++;
+    cmpSeries.push({id,field:entry.field,label:entry.label,unit:entry.unit,color:PALETTE[id%PALETTE.length]});
+    renderCompare();
+  };
+  $$('.cmp-rm').forEach(btn=>btn.onclick=e=>{cmpSeries=cmpSeries.filter(s=>s.id!==+e.currentTarget.dataset.id);renderCompare();});
+  if($('#cmpClear'))$('#cmpClear').onclick=()=>{cmpSeries=[];renderCompare();};
 }
 $$('#tabs .tab').forEach(t=>t.onclick=()=>{$$('#tabs .tab').forEach(x=>x.classList.remove('active'));t.classList.add('active');TAB=t.dataset.t;route();});
 $('#refresh').onclick=load;
