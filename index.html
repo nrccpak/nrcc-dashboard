@@ -90,6 +90,10 @@ td b{color:var(--ink);font-weight:600}
 .err{background:rgba(248,113,113,.08);border:1px solid rgba(248,113,113,.3);color:#fca5a5;border-radius:12px;line-height:1.6;text-align:left;padding:16px}
 footer{margin-top:28px;padding-top:16px;border-top:1px solid var(--line);display:flex;justify-content:space-between;flex-wrap:wrap;gap:10px;font-family:'Spline Sans Mono',monospace;font-size:11px;color:var(--ink-faint)}
 @media(max-width:1080px){.kpis{grid-template-columns:repeat(3,1fr)}.grid,.grid-2,.fc-grid{grid-template-columns:1fr}.stat-row{grid-template-columns:repeat(2,1fr)}}
+.sub-tabs{display:flex;gap:5px;margin-bottom:18px;flex-wrap:wrap}
+.sub-tab{font-family:'Spline Sans Mono',monospace;font-size:12px;background:var(--panel-2);color:var(--ink-dim);border:1px solid var(--line);border-radius:8px;padding:7px 15px;cursor:pointer;transition:.15s}
+.sub-tab:hover{color:var(--ink);border-color:var(--ink-faint)}
+.sub-tab.active{background:rgba(96,165,250,.12);color:var(--blue);border-color:var(--blue)}
 </style>
 </head>
 <body>
@@ -107,6 +111,7 @@ footer{margin-top:28px;padding-top:16px;border-top:1px solid var(--line);display
     <div class="tab" data-t="explorer">🔬 KPI Explorer</div>
     <div class="tab" data-t="fuel">🛢️ Fuel &amp; Tankers</div>
     <div class="tab" data-t="forecast">🔮 Forecast</div>
+    <div class="tab" data-t="reports">📋 Reports</div>
   </div>
   <div id="app"><div class="loading">Loading master dataset…</div></div>
   <footer>
@@ -144,6 +149,7 @@ function route(){killCharts();
   else if(TAB==='explorer')renderExplorer();
   else if(TAB==='fuel')renderFuel();
   else if(TAB==='forecast')renderForecast();
+  else if(TAB==='reports')renderReports();
 }
 let ovGran='daily',ovEnd=null;
 function periodRows(gran,endIdx){if(gran==='daily')return[DATA[endIdx]];const span=gran==='weekly'?7:30;return DATA.slice(Math.max(0,endIdx-span+1),endIdx+1);}
@@ -200,13 +206,16 @@ function tankBars(r){
   return tanks.map(([nm,sub,v,thr])=>{const pct=isNaN(v)?0:v*10;const cls=pct<thr?(pct<thr*0.8?'crit':'warn'):'';return `<div class="tank"><div class="top"><div class="name">${nm}<small>${sub}</small></div><div class="fig">${fmt(v,2)} m · ${fmt(pct,0)}%</div></div><div class="barg ${cls}"><i style="width:${Math.min(pct,100)}%"></i></div></div>`;}).join('');
 }
 function flagList(r){const fl=(r.flags||'').split(';').filter(Boolean);if(!fl.length)return '<div class="flag"><span class="pip g"></span><span>No flags.</span></div>';return fl.map(f=>{const t=f.trim();const c=t.startsWith('RED')?'r':t.startsWith('GRN')?'g':'y';return `<div class="flag"><span class="pip ${c}"></span><span>${t.replace(/^(RED|YLW|GRN):/,'')}</span></div>`;}).join('');}
-let expCol='lo_gross_topup_ltr',expWin=31;
+let expCol='lo_gross_topup_ltr',expWin=31,expSearch='';
+let reportType='generation',reportWin=31;
 function niceLabel(c){return c.replace(/_/g,' ');}
 function renderExplorer(){
   const cols=Object.keys(DATA[0]).filter(c=>c!=='date'&&c!=='comments'&&c!=='flags');
   const numeric=cols.filter(c=>DATA.some(r=>!isNaN(num(r[c]))));
-  if(!numeric.includes(expCol))expCol=numeric[0];
-  const opts=numeric.map(c=>`<option value="${c}" ${c===expCol?'selected':''}>${niceLabel(c)}</option>`).join('');
+  const filtered=expSearch?numeric.filter(c=>niceLabel(c).toLowerCase().includes(expSearch.toLowerCase())):numeric;
+  const visibleCols=filtered.length?filtered:numeric;
+  if(!visibleCols.includes(expCol))expCol=visibleCols[0];
+  const opts=visibleCols.map(c=>`<option value="${c}" ${c===expCol?'selected':''}>${niceLabel(c)}</option>`).join('');
   const win=DATA.slice(Math.max(0,DATA.length-expWin));
   const vals=win.map(r=>num(r[expCol]));
   const valid=vals.filter(v=>!isNaN(v));
@@ -216,6 +225,7 @@ function renderExplorer(){
   const isSum=SUM_FIELDS.has(expCol);
   $('#app').innerHTML=`
    <div class="bar-controls">
+     <label class="fld">Search KPI<input id="expSearch" type="text" placeholder="filter columns…" value="${expSearch}" style="width:200px"></label>
      <label class="fld">KPI / Column<select id="expCol" style="min-width:240px">${opts}</select></label>
      <label class="fld">Window<select id="expWin">
        <option value="7" ${expWin===7?'selected':''}>Last 7 days</option>
@@ -236,6 +246,7 @@ function renderExplorer(){
      </tbody></table></div></div>`;
   const L=win.map(x=>x.date.slice(5));
   charts.push(new Chart($('#cExp'),{type:'line',data:{labels:L,datasets:[{label:niceLabel(expCol),data:vals,borderColor:'#a78bfa',backgroundColor:'rgba(167,139,250,.14)',fill:true,tension:.3,borderWidth:2,pointRadius:2,pointBackgroundColor:'#a78bfa',spanGaps:true}]},options:chartOpts()}));
+  $('#expSearch').oninput=e=>{const pos=e.target.selectionStart;expSearch=e.target.value;route();setTimeout(()=>{const el=$('#expSearch');if(el){el.focus();el.setSelectionRange(pos,pos);}},0);};
   $('#expCol').onchange=e=>{expCol=e.target.value;route();};
   $('#expWin').onchange=e=>{expWin=+e.target.value;route();};
 }
@@ -376,6 +387,158 @@ function renderForecast(){
   $('#fcTank').onchange=e=>{fcTank=+e.target.value;fcTankersDay=null;route();};
   $('#fcWin').onchange=e=>{fcWin=+e.target.value;route();};
   $('#fcTk').oninput=e=>{fcTankersDay=Math.max(0,+e.target.value||0);route();setTimeout(()=>{const el=$('#fcTk');if(el){el.focus();el.setSelectionRange(el.value.length,el.value.length);}},0);};
+}
+function renderReports(){
+  const win=DATA.slice(reportWin===9999?0:Math.max(0,DATA.length-reportWin));
+  const rTabs=[['generation','⚡ Generation'],['aux','🔌 Aux Consumption'],['fuel','🛢️ Fuel Efficiency'],['lo','🔧 Lube Oil']];
+  const controls=`<div class="sub-tabs" id="rTabs">${rTabs.map(([k,l])=>`<div class="sub-tab${reportType===k?' active':''}" data-r="${k}">${l}</div>`).join('')}</div>
+   <div class="bar-controls" style="margin-bottom:18px"><label class="fld">Date window<select id="repWin"><option value="7" ${reportWin===7?'selected':''}>Last 7 days</option><option value="14" ${reportWin===14?'selected':''}>Last 14 days</option><option value="31" ${reportWin===31?'selected':''}>Last 31 days</option><option value="9999" ${reportWin===9999?'selected':''}>Full history</option></select></label>
+   <div style="align-self:center;color:var(--ink-faint);font-family:'Spline Sans Mono',monospace;font-size:11px">${win.length} days · ${win[0].date} → ${win[win.length-1].date}</div></div>`;
+  if(reportType==='generation')renderGenReport(win,controls);
+  else if(reportType==='aux')renderAuxReport(win,controls);
+  else if(reportType==='fuel')renderFuelReport(win,controls);
+  else renderLOReport(win,controls);
+  $$('#rTabs .sub-tab').forEach(t=>t.onclick=()=>{reportType=t.dataset.r;renderReports();});
+  $('#repWin').onchange=e=>{reportWin=+e.target.value;renderReports();};
+}
+function renderGenReport(win,controls){
+  const dgs=[1,2,3,4,5,6,7,8,9];
+  const totGross=win.reduce((a,r)=>a+(num(r.gross_gen_kwh)||0),0);
+  const totNet=win.reduce((a,r)=>a+(num(r.net_gen_kwh)||0),0);
+  const totExp=win.reduce((a,r)=>a+(num(r.export_kwh)||0),0);
+  const totAux=win.reduce((a,r)=>a+(num(r.aux_kwh)||0),0);
+  const dgData=dgs.map(n=>{const gen=win.reduce((a,r)=>a+(num(r['dg'+n+'_gen_kwh'])||0),0);const hrs=win.reduce((a,r)=>a+(num(r['dg'+n+'_run_hrs'])||0),0);const avgMW=hrs>0?gen/hrs/1000:NaN;return{n,gen,hrs,avgMW,pct:totGross>0?gen/totGross*100:0};});
+  const dgColors=['#36d399','#60a5fa','#a78bfa','#fbbf24','#f472b6','#2dd4bf','#818cf8','#fb923c','#a3e635'];
+  const trendL=win.map(x=>x.date.slice(5));
+  $('#app').innerHTML=controls+`
+   <div class="kpis" style="grid-template-columns:repeat(4,1fr)">
+     <div class="kpi"><div class="lab">Gross Gen</div><div class="val">${fmt(totGross/1000,1)}<span class="unit">MWh</span></div></div>
+     <div class="kpi blue"><div class="lab">Net Gen</div><div class="val">${fmt(totNet/1000,1)}<span class="unit">MWh</span></div></div>
+     <div class="kpi amber"><div class="lab">Export</div><div class="val">${fmt(totExp/1000,1)}<span class="unit">MWh</span></div></div>
+     <div class="kpi violet"><div class="lab">Aux Consumption</div><div class="val">${fmt(totAux/1000,1)}<span class="unit">MWh</span></div></div>
+   </div>
+   <div class="grid">
+     <div class="card"><h2>⚡ DG-wise Generation<span class="tag">period total MWh</span></h2><div class="chartbox"><canvas id="cDgGen"></canvas></div></div>
+     <div class="card"><h2>📈 Daily Generation Trend<span class="tag">Gross · Export · Net</span></h2><div class="chartbox"><canvas id="cGenTrend"></canvas></div></div>
+   </div>
+   <div class="card full" style="margin-top:15px"><h2>📋 DG Breakdown<span class="tag">period summary</span></h2>
+     <div class="tbl-scroll"><table><thead><tr><th>Unit</th><th>Run Hrs</th><th>Generation (MWh)</th><th>Avg Load (MW)</th><th>% of Gross</th></tr></thead><tbody>
+     ${dgData.map(d=>`<tr><td><b>DG ${d.n}</b></td><td>${fmt(d.hrs,1)}</td><td>${d.gen>0?fmt(d.gen/1000,2):'—'}</td><td>${isNaN(d.avgMW)?'—':fmt(d.avgMW,2)}</td><td>${d.gen>0?fmt(d.pct,1)+'%':'—'}</td></tr>`).join('')}
+     <tr style="border-top:2px solid var(--line)"><td><b>TOTAL</b></td><td>${fmt(dgData.reduce((a,d)=>a+d.hrs,0),1)}</td><td><b>${fmt(totGross/1000,2)}</b></td><td>—</td><td>100%</td></tr>
+     </tbody></table></div></div>`;
+  const active=dgData.filter(d=>d.gen>0);
+  charts.push(new Chart($('#cDgGen'),{type:'bar',data:{labels:active.map(d=>'DG '+d.n),datasets:[{data:active.map(d=>+(d.gen/1000).toFixed(2)),backgroundColor:active.map((_,i)=>dgColors[i%9]),borderRadius:6}]},options:chartOpts({plugins:{legend:{display:false}}})}));
+  charts.push(new Chart($('#cGenTrend'),{type:'line',data:{labels:trendL,datasets:[
+    {label:'Gross MWh',data:win.map(x=>num(x.gross_gen_kwh)/1000),borderColor:'#36d399',backgroundColor:'rgba(54,211,153,.1)',fill:true,tension:.35,borderWidth:2,pointRadius:0},
+    {label:'Export MWh',data:win.map(x=>num(x.export_kwh)/1000),borderColor:'#60a5fa',tension:.35,borderWidth:2,pointRadius:0},
+    {label:'Net MWh',data:win.map(x=>num(x.net_gen_kwh)/1000),borderColor:'#a78bfa',borderDash:[4,3],tension:.35,borderWidth:1.5,pointRadius:0}
+  ]},options:chartOpts()}));
+}
+function renderAuxReport(win,controls){
+  const totAux=win.reduce((a,r)=>a+(num(r.aux_kwh)||0),0);
+  const avgAux=totAux/win.length;
+  const grossTotal=win.reduce((a,r)=>a+(num(r.gross_gen_kwh)||0),0);
+  const auxPct=grossTotal>0?totAux/grossTotal*100:NaN;
+  const baoKeys=['bao901_kwh','bao902_kwh','bao903_kwh','bao904_kwh','bao905_kwh','bao906_kwh','bao907_kwh','bao909_kwh','bao910_kwh'];
+  const baoLabels=['BAO901','BAO902','BAO903','BAO904','BAO905','BAO906','BAO907','BAO909','BAO910'];
+  const baoColors=['#36d399','#60a5fa','#a78bfa','#fbbf24','#f472b6','#2dd4bf','#818cf8','#fb923c','#a3e635'];
+  const baoTot=baoKeys.map(k=>win.reduce((a,r)=>a+(num(r[k])||0),0));
+  const trendL=win.map(x=>x.date.slice(5));
+  $('#app').innerHTML=controls+`
+   <div class="kpis" style="grid-template-columns:repeat(4,1fr)">
+     <div class="kpi violet"><div class="lab">Total Aux</div><div class="val">${fmt(totAux/1000,1)}<span class="unit">MWh</span></div></div>
+     <div class="kpi blue"><div class="lab">Avg Aux / day</div><div class="val">${fmt(avgAux/1000,2)}<span class="unit">MWh</span></div></div>
+     <div class="kpi ${auxPct>6?'red':''}"><div class="lab">Aux % of Gross</div><div class="val">${fmt(auxPct,1)}<span class="unit">%</span></div><div class="delta ${auxPct<=6?'up':'down'}">target ≤ 6%</div></div>
+     <div class="kpi"><div class="lab">Gross Gen (period)</div><div class="val">${fmt(grossTotal/1000,1)}<span class="unit">MWh</span></div></div>
+   </div>
+   <div class="grid">
+     <div class="card"><h2>🔌 Aux Consumption Trend<span class="tag">daily kWh</span></h2><div class="chartbox"><canvas id="cAuxTrend"></canvas></div></div>
+     <div class="card"><h2>📊 BAO Meter Breakdown<span class="tag">period total kWh</span></h2><div class="chartbox"><canvas id="cBao"></canvas></div></div>
+   </div>
+   <div class="card full" style="margin-top:15px"><h2>📋 Daily Aux Log<span class="tag">most recent first</span></h2>
+     <div class="tbl-scroll"><table><thead><tr><th>Date</th><th>Aux kWh</th><th>Aux %</th><th>BAA901</th><th>BAA903</th><th>BAA906</th></tr></thead><tbody>
+     ${[...win].reverse().map(r=>{const a=num(r.aux_kwh),g=num(r.gross_gen_kwh),p=g>0?a/g*100:NaN;return`<tr><td>${r.date}</td><td><b>${fmt(a,0)}</b></td><td class="${!isNaN(p)&&p>6?'down':''}">${fmt(p,1)}%</td><td>${fmt(num(r.aux_baa901_kwh),0)}</td><td>${fmt(num(r.aux_baa903_kwh),0)}</td><td>${fmt(num(r.aux_baa906_kwh),0)}</td></tr>`;}).join('')}
+     </tbody></table></div></div>`;
+  charts.push(new Chart($('#cAuxTrend'),{type:'line',data:{labels:trendL,datasets:[
+    {label:'Total Aux kWh',data:win.map(x=>num(x.aux_kwh)),borderColor:'#a78bfa',backgroundColor:'rgba(167,139,250,.12)',fill:true,tension:.3,borderWidth:2,pointRadius:0},
+    {label:'BAA901',data:win.map(x=>num(x.aux_baa901_kwh)),borderColor:'#60a5fa',tension:.3,borderWidth:1.5,pointRadius:0,spanGaps:true},
+    {label:'BAA903',data:win.map(x=>num(x.aux_baa903_kwh)),borderColor:'#fbbf24',tension:.3,borderWidth:1.5,pointRadius:0,spanGaps:true},
+    {label:'BAA906',data:win.map(x=>num(x.aux_baa906_kwh)),borderColor:'#f472b6',tension:.3,borderWidth:1.5,pointRadius:0,spanGaps:true}
+  ]},options:chartOpts()}));
+  const nzBao=baoTot.map((v,i)=>({v,l:baoLabels[i],c:baoColors[i]})).filter(x=>x.v>0);
+  if(nzBao.length)charts.push(new Chart($('#cBao'),{type:'bar',data:{labels:nzBao.map(x=>x.l),datasets:[{data:nzBao.map(x=>x.v),backgroundColor:nzBao.map(x=>x.c),borderRadius:6}]},options:chartOpts({plugins:{legend:{display:false}}})}));
+}
+function renderFuelReport(win,controls){
+  const totHfo=win.reduce((a,r)=>a+(num(r.total_hfo_kg)||0),0);
+  const totLfo=win.reduce((a,r)=>a+(num(r.total_lfo_kg)||0),0);
+  const sfcVals=win.map(r=>num(r.sfc_g_kwh)).filter(v=>!isNaN(v));
+  const avgSfc=sfcVals.length?sfcVals.reduce((a,b)=>a+b,0)/sfcVals.length:NaN;
+  const bestSfc=sfcVals.length?Math.min(...sfcVals):NaN;
+  const worstSfc=sfcVals.length?Math.max(...sfcVals):NaN;
+  const dgs=[1,2,3,4,5,6,7,8,9];
+  const dgHfo=dgs.map(n=>win.reduce((a,r)=>a+(num(r['dg'+n+'_hfo_kg'])||0),0));
+  const dgGen=dgs.map(n=>win.reduce((a,r)=>a+(num(r['dg'+n+'_gen_kwh'])||0),0));
+  const dgSfc=dgs.map((n,i)=>dgGen[i]>0?dgHfo[i]/dgGen[i]*1000:NaN);
+  const dgColors=['#36d399','#60a5fa','#a78bfa','#fbbf24','#f472b6','#2dd4bf','#818cf8','#fb923c','#a3e635'];
+  const trendL=win.map(x=>x.date.slice(5));
+  const totGross=win.reduce((a,r)=>a+(num(r.gross_gen_kwh)||0),0);
+  $('#app').innerHTML=controls+`
+   <div class="kpis" style="grid-template-columns:repeat(4,1fr)">
+     <div class="kpi amber"><div class="lab">Total HFO</div><div class="val">${fmt(totHfo/1000,1)}<span class="unit">t</span></div></div>
+     <div class="kpi blue"><div class="lab">Total LFO</div><div class="val">${fmt(totLfo/1000,1)}<span class="unit">t</span></div></div>
+     <div class="kpi ${avgSfc>225?'red':''}"><div class="lab">Avg SFC</div><div class="val">${fmt(avgSfc,1)}<span class="unit">g/kWh</span></div><div class="delta ${avgSfc<=225?'up':'down'}">target ≤ 225</div></div>
+     <div class="kpi"><div class="lab">Best / Worst SFC</div><div class="val" style="font-size:17px">${fmt(bestSfc,1)} / ${fmt(worstSfc,1)}<span class="unit">g/kWh</span></div></div>
+   </div>
+   <div class="grid">
+     <div class="card"><h2>🔥 SFC Trend<span class="tag">g/kWh · target 225</span></h2><div class="chartbox"><canvas id="cSfcRep"></canvas></div></div>
+     <div class="card"><h2>🛢️ HFO per DG<span class="tag">period total kg</span></h2><div class="chartbox"><canvas id="cDgHfo"></canvas></div></div>
+   </div>
+   <div class="card full" style="margin-top:15px"><h2>📋 DG Fuel Efficiency<span class="tag">period summary</span></h2>
+     <div class="tbl-scroll"><table><thead><tr><th>Unit</th><th>HFO (kg)</th><th>Gen (MWh)</th><th>Unit SFC (g/kWh)</th></tr></thead><tbody>
+     ${dgs.map((n,i)=>dgHfo[i]>0?`<tr><td><b>DG ${n}</b></td><td>${fmt(dgHfo[i],0)}</td><td>${fmt(dgGen[i]/1000,2)}</td><td class="${isNaN(dgSfc[i])?'':dgSfc[i]>225?'down':'up'}">${isNaN(dgSfc[i])?'—':fmt(dgSfc[i],1)}</td></tr>`:'').join('')}
+     <tr style="border-top:2px solid var(--line)"><td><b>TOTAL</b></td><td><b>${fmt(totHfo,0)}</b></td><td><b>${fmt(totGross/1000,2)}</b></td><td class="${avgSfc>225?'down':'up'}"><b>${fmt(avgSfc,1)}</b></td></tr>
+     </tbody></table></div></div>`;
+  charts.push(new Chart($('#cSfcRep'),{type:'line',data:{labels:trendL,datasets:[
+    {label:'SFC',data:win.map(x=>num(x.sfc_g_kwh)),borderColor:'#fbbf24',backgroundColor:'rgba(251,191,36,.12)',fill:true,tension:.35,borderWidth:2,pointRadius:0,spanGaps:true},
+    {label:'Target 225',data:win.map(()=>225),borderColor:'#f87171',borderDash:[5,4],borderWidth:1.5,pointRadius:0}
+  ]},options:chartOpts()}));
+  const nzHfo=dgs.map((n,i)=>({l:'DG '+n,v:dgHfo[i],c:dgColors[i]})).filter(x=>x.v>0);
+  if(nzHfo.length)charts.push(new Chart($('#cDgHfo'),{type:'bar',data:{labels:nzHfo.map(x=>x.l),datasets:[{data:nzHfo.map(x=>x.v),backgroundColor:nzHfo.map(x=>x.c),borderRadius:6}]},options:chartOpts({plugins:{legend:{display:false}}})}));
+}
+function renderLOReport(win,controls){
+  const totLo=win.reduce((a,r)=>a+(num(r.total_lo_topup_ltr)||0),0);
+  const totGross=win.reduce((a,r)=>a+(num(r.lo_gross_topup_ltr)||0),0);
+  const totSweet=win.reduce((a,r)=>a+(num(r.lo_sweetening_ltr)||0),0);
+  const latestStock=num(DATA[DATA.length-1].lo_stock_ltr);
+  const dgs=[1,2,3,4,5,6,7,8,9];
+  const dgLo=dgs.map(n=>win.reduce((a,r)=>a+(num(r['dg'+n+'_lo_ltr'])||0),0));
+  const dgGross=dgs.map(n=>win.reduce((a,r)=>a+(num(r['dg'+n+'_lo_gross_ltr'])||0),0));
+  const dgSweet=dgs.map(n=>win.reduce((a,r)=>a+(num(r['dg'+n+'_lo_sweet_ltr'])||0),0));
+  const dgColors=['#36d399','#60a5fa','#a78bfa','#fbbf24','#f472b6','#2dd4bf','#818cf8','#fb923c','#a3e635'];
+  const trendL=win.map(x=>x.date.slice(5));
+  $('#app').innerHTML=controls+`
+   <div class="kpis" style="grid-template-columns:repeat(4,1fr)">
+     <div class="kpi"><div class="lab">Total LO Topup</div><div class="val">${fmt(totLo,0)}<span class="unit">L</span></div></div>
+     <div class="kpi blue"><div class="lab">Gross Topup</div><div class="val">${fmt(totGross,0)}<span class="unit">L</span></div></div>
+     <div class="kpi amber"><div class="lab">Sweetening</div><div class="val">${fmt(totSweet,0)}<span class="unit">L</span></div></div>
+     <div class="kpi ${latestStock<10000?'red':latestStock<20000?'amber':''}"><div class="lab">Current Stock</div><div class="val">${fmt(latestStock,0)}<span class="unit">L</span></div></div>
+   </div>
+   <div class="grid">
+     <div class="card"><h2>🔧 Daily LO Topup<span class="tag">total · gross · sweetening</span></h2><div class="chartbox"><canvas id="cLoTrend"></canvas></div></div>
+     <div class="card"><h2>🔧 LO per DG<span class="tag">period total litres</span></h2><div class="chartbox"><canvas id="cDgLo"></canvas></div></div>
+   </div>
+   <div class="card full" style="margin-top:15px"><h2>📋 DG LO Breakdown<span class="tag">period summary</span></h2>
+     <div class="tbl-scroll"><table><thead><tr><th>Unit</th><th>LO Topup (L)</th><th>Gross Topup (L)</th><th>Sweetening (L)</th></tr></thead><tbody>
+     ${dgs.map((n,i)=>`<tr><td><b>DG ${n}</b></td><td>${dgLo[i]>0?fmt(dgLo[i],0):'—'}</td><td>${dgGross[i]>0?fmt(dgGross[i],0):'—'}</td><td>${dgSweet[i]>0?`<span class="down">${fmt(dgSweet[i],0)}</span>`:'—'}</td></tr>`).join('')}
+     <tr style="border-top:2px solid var(--line)"><td><b>TOTAL</b></td><td><b>${fmt(totLo,0)}</b></td><td><b>${fmt(totGross,0)}</b></td><td><b>${totSweet>0?fmt(totSweet,0):'—'}</b></td></tr>
+     </tbody></table></div></div>`;
+  charts.push(new Chart($('#cLoTrend'),{type:'line',data:{labels:trendL,datasets:[
+    {label:'Total LO (L)',data:win.map(x=>num(x.total_lo_topup_ltr)),borderColor:'#36d399',backgroundColor:'rgba(54,211,153,.12)',fill:true,tension:.3,borderWidth:2,pointRadius:2,spanGaps:true},
+    {label:'Gross (L)',data:win.map(x=>num(x.lo_gross_topup_ltr)),borderColor:'#60a5fa',tension:.3,borderWidth:1.5,pointRadius:2,spanGaps:true},
+    {label:'Sweetening (L)',data:win.map(x=>num(x.lo_sweetening_ltr)),borderColor:'#fbbf24',tension:.3,borderWidth:1.5,pointRadius:2,spanGaps:true}
+  ]},options:chartOpts()}));
+  const nzLo=dgs.map((n,i)=>({l:'DG '+n,v:dgLo[i],c:dgColors[i]})).filter(x=>x.v>0);
+  if(nzLo.length)charts.push(new Chart($('#cDgLo'),{type:'bar',data:{labels:nzLo.map(x=>x.l),datasets:[{data:nzLo.map(x=>x.v),backgroundColor:nzLo.map(x=>x.c),borderRadius:6}]},options:chartOpts({plugins:{legend:{display:false}}})}));
 }
 $$('#tabs .tab').forEach(t=>t.onclick=()=>{$$('#tabs .tab').forEach(x=>x.classList.remove('active'));t.classList.add('active');TAB=t.dataset.t;route();});
 $('#refresh').onclick=load;
