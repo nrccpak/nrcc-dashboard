@@ -167,31 +167,39 @@ function route(){killCharts();
   else if(TAB==='reports')renderReports();
   else if(TAB==='compare')renderCompare();
 }
-let ovGran='daily',ovEnd=null;
+let ovDateFrom=null,ovDateTo=null,ovDgMetric='gen';
 function periodRows(gran,endIdx){if(gran==='daily')return[DATA[endIdx]];const span=gran==='weekly'?7:30;return DATA.slice(Math.max(0,endIdx-span+1),endIdx+1);}
 function agg(rows,field){const vals=rows.map(r=>num(r[field])).filter(v=>!isNaN(v));if(!vals.length)return NaN;if(SUM_FIELDS.has(field))return vals.reduce((a,b)=>a+b,0);return vals.reduce((a,b)=>a+b,0)/vals.length;}
 function renderOverview(){
-  if(ovEnd===null)ovEnd=DATA.length-1;
-  const rows=periodRows(ovGran,ovEnd);
-  const r=DATA[ovEnd];
-  const prevRows=periodRows(ovGran,Math.max(0,ovEnd-rows.length));
-  const gran=ovGran;
+  if(!ovDateTo)ovDateTo=DATA[DATA.length-1].date;
+  if(!ovDateFrom)ovDateFrom=DATA[DATA.length-1].date;
+  const rows=DATA.filter(r=>r.date>=ovDateFrom&&r.date<=ovDateTo);
+  if(!rows.length){$('#app').innerHTML='<div class="err">No data for selected date range.</div>';return;}
+  const r=rows[rows.length-1];
+  const prevRows=DATA.filter(x=>x.date<ovDateFrom).slice(-rows.length);
   const gross=agg(rows,'gross_gen_kwh'),exp=agg(rows,'export_kwh'),hfo=agg(rows,'total_hfo_kg');
   const sfc=agg(rows,'sfc_g_kwh'),tankers=agg(rows,'tankers_total');
   const sludge=num(r.sludge_tank_pct),loStock=num(r.lo_stock_ltr),usedLoPct=num(r.used_lo_pct);
   const tankRecv=[1,2,3,4,5].map(t=>agg(rows,'tankers_tank'+t));
   let running=0,maint=0,stby=0;for(let n=1;n<=9;n++){const rh=num(r['dg'+n+'_run_hrs']);if(rh>0)running++;else if(num(r['dg'+n+'_maint_hrs'])>0||n===9)maint++;else stby++;}
   const dlt=(f)=>{const a=agg(rows,f),b=agg(prevRows,f);if(isNaN(a)||isNaN(b)||b===0)return'';const d=(a-b)/b*100;return `<div class="delta ${d>=0?'up':'down'}">${d>=0?'▲':'▼'} ${Math.abs(d).toFixed(1)}% vs prev</div>`;};
-  const isAgg=gran!=='daily';const lab=isAgg?(gran==='weekly'?'7-day':'30-day'):'day';
-  const dateOpts=DATA.map((x,i)=>`<option value="${i}" ${i===ovEnd?'selected':''}>${x.date}</option>`).join('');
+  const lab=rows.length===1?'day':`${rows.length}-day`;const isAgg=rows.length>1;
+  const dgColors=['#36d399','#60a5fa','#a78bfa','#fbbf24','#f472b6','#2dd4bf','#818cf8','#fb923c','#a3e635'];
+  const dgMetrics={gen:{sfx:'gen_kwh',lbl:'Generation (kWh)'},hrs:{sfx:'run_hrs',lbl:'Run Hours'},hfo:{sfx:'hfo_kg',lbl:'HFO Consumption (kg)'},lo:{sfx:'lo_ltr',lbl:'LO Topup (L)'}};
+  const dm=dgMetrics[ovDgMetric];
+  const dgVals=[1,2,3,4,5,6,7,8,9].map(n=>rows.reduce((a,r)=>a+(num(r['dg'+n+'_'+dm.sfx])||0),0));
+  const baoKeys=['bao901_kwh','bao902_kwh','bao903_kwh','bao904_kwh','bao905_kwh','bao906_kwh','bao907_kwh','bao909_kwh','bao910_kwh'];
+  const baoLabels=['BAO 901','BAO 902','BAO 903','BAO 904','BAO 905','BAO 906','BAO 907','BAO 909','BAO 910'];
+  const baoVals=baoKeys.map(k=>rows.reduce((a,r)=>a+(num(r[k])||0),0));
+  const L=rows.map(x=>x.date.slice(5));
   $('#app').innerHTML=`
    <div class="bar-controls">
-     <label class="fld">Granularity<select id="ovGran">
-       <option value="daily" ${gran==='daily'?'selected':''}>Daily</option>
-       <option value="weekly" ${gran==='weekly'?'selected':''}>Weekly (7-day)</option>
-       <option value="monthly" ${gran==='monthly'?'selected':''}>Monthly (30-day)</option></select></label>
-     <label class="fld">Period end date<select id="ovEnd">${dateOpts}</select></label>
-     <div style="align-self:center;color:var(--ink-faint);font-family:'Spline Sans Mono',monospace;font-size:11px">${rows.length} day(s): ${rows[0].date} → ${rows[rows.length-1].date}</div>
+     <label class="fld">From<input type="date" id="ovFrom" value="${ovDateFrom}" min="${DATA[0].date}" max="${DATA[DATA.length-1].date}" style="width:150px"></label>
+     <label class="fld">To<input type="date" id="ovTo" value="${ovDateTo}" min="${DATA[0].date}" max="${DATA[DATA.length-1].date}" style="width:150px"></label>
+     <button id="ovToday" style="align-self:flex-end">Today</button>
+     <button id="ov7d" style="align-self:flex-end">Last 7d</button>
+     <button id="ov30d" style="align-self:flex-end">Last 30d</button>
+     <div style="align-self:center;color:var(--ink-faint);font-family:'Spline Sans Mono',monospace;font-size:11px">${rows.length} day(s) · ${rows[0].date} → ${rows[rows.length-1].date}</div>
    </div>
    <div class="kpis">
     <div class="kpi"><div class="lab">Gross Gen (${lab})</div><div class="val">${fmt(gross/1000,1)}<span class="unit">MWh</span></div>${dlt('gross_gen_kwh')}</div>
@@ -205,22 +213,45 @@ function renderOverview(){
     <div class="kpi blue"><div class="lab">Tankers (${lab})</div><div class="val">${fmt(tankers,0)}<span class="unit">loads</span></div><div class="delta">${tankRecv.map((v,i)=>v>0?'T'+(i+1)+':'+Math.round(v):'').filter(Boolean).join(' · ')||'none'}</div></div>
    </div>
    <div class="grid">
-     <div class="card"><h2>📈 Generation &amp; Export<span class="tag">last 21 days</span></h2><div class="chartbox"><canvas id="cGen"></canvas></div></div>
+     <div class="card"><h2>📈 Generation &amp; Export<span class="tag">${rows.length} day(s)</span></h2><div class="chartbox"><canvas id="cGen"></canvas></div></div>
      <div class="card"><h2>🛢️ HFO Tanks<span class="tag">latest · % of 10 m</span></h2>${tankBars(r)}</div>
    </div>
    <div class="grid-2">
      <div class="card"><h2>🔥 SFC Trend<span class="tag">target 225</span></h2><div class="chartbox"><canvas id="cSfc"></canvas></div></div>
      <div class="card"><h2>🚨 Flags &amp; Alerts<span class="tag">${r.date}</span></h2><div class="flags">${flagList(r)}</div></div>
+   </div>
+   <div class="card full" style="margin-top:15px">
+     <h2>🔋 DG Performance<span class="tag">${rows.length} day(s) · ${dm.lbl}</span></h2>
+     <div class="mode-toggle" style="margin-bottom:14px">
+       <button class="mode-btn${ovDgMetric==='gen'?' active':''}" id="dgGen">⚡ Generation</button>
+       <button class="mode-btn${ovDgMetric==='hrs'?' active':''}" id="dgHrs">⏱ Run Hours</button>
+       <button class="mode-btn${ovDgMetric==='hfo'?' active':''}" id="dgHfo">🛢️ HFO</button>
+       <button class="mode-btn${ovDgMetric==='lo'?' active':''}" id="dgLo">🔧 LO</button>
+     </div>
+     <div class="chartbox"><canvas id="cDgPerf"></canvas></div>
+   </div>
+   <div class="card full" style="margin-top:15px">
+     <h2>📤 Feeder Export (BAO Meters)<span class="tag">${rows.length} day(s) · total kWh</span></h2>
+     <div class="chartbox"><canvas id="cFeeders"></canvas></div>
    </div>`;
-  const win=DATA.slice(Math.max(0,ovEnd-20),ovEnd+1);const L=win.map(x=>x.date.slice(5));
   charts.push(new Chart($('#cGen'),{type:'line',data:{labels:L,datasets:[
-    {label:'Gross MWh',data:win.map(x=>num(x.gross_gen_kwh)/1000),borderColor:'#36d399',backgroundColor:'rgba(54,211,153,.12)',fill:true,tension:.35,borderWidth:2,pointRadius:0},
-    {label:'Export MWh',data:win.map(x=>num(x.export_kwh)/1000),borderColor:'#60a5fa',tension:.35,borderWidth:2,pointRadius:0}]},options:chartOpts()}));
+    {label:'Gross MWh',data:rows.map(x=>num(x.gross_gen_kwh)/1000),borderColor:'#36d399',backgroundColor:'rgba(54,211,153,.12)',fill:true,tension:.35,borderWidth:2,pointRadius:0},
+    {label:'Export MWh',data:rows.map(x=>num(x.export_kwh)/1000),borderColor:'#60a5fa',tension:.35,borderWidth:2,pointRadius:0}]},options:chartOpts()}));
   charts.push(new Chart($('#cSfc'),{type:'line',data:{labels:L,datasets:[
-    {label:'SFC',data:win.map(x=>num(x.sfc_g_kwh)),borderColor:'#fbbf24',backgroundColor:'rgba(251,191,36,.12)',fill:true,tension:.35,borderWidth:2,pointRadius:0},
-    {label:'Target',data:win.map(()=>225),borderColor:'#f87171',borderDash:[5,4],borderWidth:1.5,pointRadius:0}]},options:chartOpts()}));
-  $('#ovGran').onchange=e=>{ovGran=e.target.value;route();};
-  $('#ovEnd').onchange=e=>{ovEnd=+e.target.value;route();};
+    {label:'SFC',data:rows.map(x=>num(x.sfc_g_kwh)),borderColor:'#fbbf24',backgroundColor:'rgba(251,191,36,.12)',fill:true,tension:.35,borderWidth:2,pointRadius:0},
+    {label:'Target',data:rows.map(()=>225),borderColor:'#f87171',borderDash:[5,4],borderWidth:1.5,pointRadius:0}]},options:chartOpts()}));
+  charts.push(new Chart($('#cDgPerf'),{type:'bar',data:{labels:['DG 1','DG 2','DG 3','DG 4','DG 5','DG 6','DG 7','DG 8','DG 9'],datasets:[{data:dgVals,backgroundColor:dgColors,borderRadius:6}]},options:chartOpts({plugins:{legend:{display:false}},scales:{x:{grid:{color:'#161d29'},ticks:{color:'#5b6878',font:{family:'Spline Sans Mono',size:11}}},y:{grid:{color:'#161d29'},ticks:{color:'#5b6878',font:{family:'Spline Sans Mono',size:10}}}}})}));
+  const nzBao=baoVals.map((v,i)=>({v,l:baoLabels[i],c:dgColors[i%9]})).filter(x=>x.v>0);
+  if(nzBao.length)charts.push(new Chart($('#cFeeders'),{type:'bar',data:{labels:nzBao.map(x=>x.l),datasets:[{data:nzBao.map(x=>x.v/1000),backgroundColor:nzBao.map(x=>x.c),borderRadius:6}]},options:chartOpts({plugins:{legend:{display:false}},scales:{x:{grid:{color:'#161d29'},ticks:{color:'#5b6878',font:{family:'Spline Sans Mono',size:11}}},y:{grid:{color:'#161d29'},ticks:{color:'#5b6878',font:{family:'Spline Sans Mono',size:10}},title:{display:true,text:'MWh',color:'#8a99ad',font:{size:10}}}}})}));
+  $('#ovFrom').onchange=e=>{ovDateFrom=e.target.value;if(ovDateFrom>ovDateTo)ovDateTo=ovDateFrom;route();};
+  $('#ovTo').onchange=e=>{ovDateTo=e.target.value;if(ovDateTo<ovDateFrom)ovDateFrom=ovDateTo;route();};
+  $('#ovToday').onclick=()=>{ovDateFrom=ovDateTo=DATA[DATA.length-1].date;route();};
+  $('#ov7d').onclick=()=>{ovDateTo=DATA[DATA.length-1].date;ovDateFrom=DATA[Math.max(0,DATA.length-7)].date;route();};
+  $('#ov30d').onclick=()=>{ovDateTo=DATA[DATA.length-1].date;ovDateFrom=DATA[Math.max(0,DATA.length-30)].date;route();};
+  $('#dgGen').onclick=()=>{ovDgMetric='gen';route();};
+  $('#dgHrs').onclick=()=>{ovDgMetric='hrs';route();};
+  $('#dgHfo').onclick=()=>{ovDgMetric='hfo';route();};
+  $('#dgLo').onclick=()=>{ovDgMetric='lo';route();};
 }
 function tankBars(r){
   const tanks=[['Tank 1','Power Plant',num(r.hfo_tank1_m),50],['Tank 2','Line-1 Kiln',num(r.hfo_tank2_m),30],['Tank 3','Line-1 Kiln',num(r.hfo_tank3_m),30],['Tank 4','Line-2 Kiln',num(r.hfo_tank4_m),30],['Tank 5','Line-1 alt',num(r.hfo_tank5_m),30]];
