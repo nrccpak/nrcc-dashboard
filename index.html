@@ -177,7 +177,9 @@ function renderOverview(){
   const prevRows=periodRows(ovGran,Math.max(0,ovEnd-rows.length));
   const gran=ovGran;
   const gross=agg(rows,'gross_gen_kwh'),exp=agg(rows,'export_kwh'),hfo=agg(rows,'total_hfo_kg');
-  const sfc=agg(rows,'sfc_g_kwh'),tloss=agg(rows,'trans_loss_pct');
+  const sfc=agg(rows,'sfc_g_kwh'),tankers=agg(rows,'tankers_total');
+  const sludge=num(r.sludge_tank_pct),loStock=num(r.lo_stock_ltr),usedLoPct=num(r.used_lo_pct);
+  const tankRecv=[1,2,3,4,5].map(t=>agg(rows,'tankers_tank'+t));
   let running=0,maint=0,stby=0;for(let n=1;n<=9;n++){const rh=num(r['dg'+n+'_run_hrs']);if(rh>0)running++;else if(num(r['dg'+n+'_maint_hrs'])>0||n===9)maint++;else stby++;}
   const dlt=(f)=>{const a=agg(rows,f),b=agg(prevRows,f);if(isNaN(a)||isNaN(b)||b===0)return'';const d=(a-b)/b*100;return `<div class="delta ${d>=0?'up':'down'}">${d>=0?'▲':'▼'} ${Math.abs(d).toFixed(1)}% vs prev</div>`;};
   const isAgg=gran!=='daily';const lab=isAgg?(gran==='weekly'?'7-day':'30-day'):'day';
@@ -197,7 +199,10 @@ function renderOverview(){
     <div class="kpi ${sfc>225?'red':''}"><div class="lab">SFC ${isAgg?'avg':''}</div><div class="val">${fmt(sfc,1)}<span class="unit">g/kWh</span></div><div class="delta ${sfc<=225?'up':'down'}">target ≤ 225</div></div>
     <div class="kpi amber"><div class="lab">HFO Burn (${lab})</div><div class="val">${fmt(hfo/1000,1)}<span class="unit">t</span></div>${dlt('total_hfo_kg')}</div>
     <div class="kpi violet"><div class="lab">Units (last day)</div><div class="val">${running}<span class="unit">/9</span></div><div class="delta">${stby} stby · ${maint} maint</div></div>
-    <div class="kpi ${tloss<0||tloss>7?'red':''}"><div class="lab">Trans Loss ${isAgg?'avg':''}</div><div class="val">${fmt(tloss,1)}<span class="unit">%</span></div><div class="delta ${tloss>=0&&tloss<=7?'up':'down'}">limit ≤ 7%</div></div>
+    <div class="kpi ${sludge>=70?'red':sludge>=60?'amber':''}"><div class="lab">Sludge Tank (last day)</div><div class="val">${fmt(sludge,0)}<span class="unit">%</span></div><div class="delta ${sludge<70?'up':'down'}">dispose at 70%</div></div>
+    <div class="kpi ${loStock<10000?'red':loStock<20000?'amber':''}"><div class="lab">LO Stock (last day)</div><div class="val">${fmt(loStock/1000,1)}<span class="unit">kL</span></div><div class="delta ${loStock>=10000?'up':'down'}">reserve 5,000 L</div></div>
+    <div class="kpi ${usedLoPct>=80?'red':usedLoPct>=60?'amber':''}"><div class="lab">Used LO Tank (last day)</div><div class="val">${fmt(usedLoPct,0)}<span class="unit">%</span></div><div class="delta ${usedLoPct<80?'up':'down'}">drain at 80%</div></div>
+    <div class="kpi blue"><div class="lab">Tankers (${lab})</div><div class="val">${fmt(tankers,0)}<span class="unit">loads</span></div><div class="delta">${tankRecv.map((v,i)=>v>0?'T'+(i+1)+':'+Math.round(v):'').filter(Boolean).join(' · ')||'none'}</div></div>
    </div>
    <div class="grid">
      <div class="card"><h2>📈 Generation &amp; Export<span class="tag">last 21 days</span></h2><div class="chartbox"><canvas id="cGen"></canvas></div></div>
